@@ -2,19 +2,17 @@
 #include <llvm/Support/JSON.h>
 #include <string>
 #include <unordered_map>
-// extern Scope , translationUnitDecl
-extern Mgr g;
 
-std::unordered_map<std::string, Obj *> sym_table;
-ScopeManager *scope_manager_p; // stupid global variabel
+std::unordered_map<std::string, Stmt *> sym_table;
 Type getType(const llvm::StringRef qualType);
+std::string getStrVal(std::string serial, int length);
 
-Obj *deserializeJson(const llvm::json::Object *O, Obj *father = std::nullptr_t())
+Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t())
 {
-    Obj *cur;
+    Stmt *cur;
+    auto id = *(O->getString("id")); // for symbol table key
     auto kind = *(O->getString("kind"));
     auto value = *(O->getString("value"));
-    auto id = *(O->getString("id")); // for symbol table key
     auto name_p = (O->getString("name"));
     if (auto built_in_p = O->getString("storageClass"))
         return nullptr;
@@ -23,7 +21,7 @@ Obj *deserializeJson(const llvm::json::Object *O, Obj *father = std::nullptr_t()
     if (O->getObject("type"))
         type = getType(*(O->getObject("type")->getString("qualType")));
     // 提前声明从而处理继承属性 - 递归以及全局变量的判定
-    Obj *_father = father;
+    Stmt *_father = father;
     FunctionDecl *tmp_func;
     TranslationUnitDecl *tmp_trans;
     if (kind == "FunctionDecl")
@@ -39,7 +37,7 @@ Obj *deserializeJson(const llvm::json::Object *O, Obj *father = std::nullptr_t()
     }
 
     // 处理子节点
-    std::vector<Obj *> inner_sons;
+    std::vector<Stmt *> inner_sons;
     if (auto inner = O->getArray("inner"))
     {
         int i = 0;
@@ -56,7 +54,6 @@ Obj *deserializeJson(const llvm::json::Object *O, Obj *father = std::nullptr_t()
         }
     }
 
-    //
     if (auto array_filler = O->getArray("array_filler"))
     {
         for (int i = 0; i < array_filler->size(); i++)
@@ -68,59 +65,42 @@ Obj *deserializeJson(const llvm::json::Object *O, Obj *father = std::nullptr_t()
 
     if (kind == "TranslationUnitDecl")
     {
-
         for (auto it : inner_sons)
-        {
-            tmp_trans->push_back(it->dcast<Decl>());
-        }
+            tmp_trans->externalDecls.push_back(it->dcast<Decl>());
         cur = tmp_trans;
     }
     else if (kind == "VarDecl")
     {
         VarDecl *tmp = Mgr::g.make<VarDecl>();
         tmp->name = name_p->str();
-        tmp->id = id.str();
         if (auto ul = father->dcast<TranslationUnitDecl>())
-        {
             tmp->is_global = true;
-        }
         else if (auto func = father->dcast<FunctionDecl>())
-        {
-            func->inside_vars.push_back(tmp); // 将变量存在FunctionDecl内
-        }
+            func->localVars.push_back(tmp); // 将变量存在FunctionDecl内
+
         sym_table.insert({id.str(), tmp});
         if (inner_sons.size() > 0)
-        {
-            tmp->flag = 1;
-            tmp->expr_p = inner_sons[0]->dcast<Expr>();
-        }
+            tmp->initExp = inner_sons[0]->dcast<Expr>();
         tmp->type = type;
+        tmp->isConst = type.is_const;
         cur = tmp;
     }
     else if (kind == "FunctionDecl")
     {
-        tmp_func->id = id.str();
         tmp_func->name = name_p->str();
-        int flag = inner_sons.size() > 0;
-
         for (auto it : inner_sons)
         {
             if (auto son = it->dcast<CompoundStmt>())
-            {
-                tmp_func->compound_stmt_p = son;
-                tmp_func->flag = 1; // 有函数体
-            }
+                tmp_func->compoundStmt = son;
             else if (auto son = it->dcast<ParmVarDecl>())
-            {
-                tmp_func->push_back(son);
-            }
+                tmp_func->parmVars.push_back(son);
             else
                 break;
         }
         tmp_func->type = type;
         cur = tmp_func;
 
-        for (auto pa : *tmp_func) // 将参数地址放入type
+        for (auto pa : tmp_func->parmVars) // 将参数地址放入type
             tmp_func->type.parm_vars.push_back(pa);
     }
     else if (kind == "ParmVarDecl")
@@ -128,69 +108,56 @@ Obj *deserializeJson(const llvm::json::Object *O, Obj *father = std::nullptr_t()
         ParmVarDecl *tmp = Mgr::g.make<ParmVarDecl>();
         tmp->name = name_p->str();
         tmp->type = type;
-        tmp->id = id.str();
         sym_table.insert({id.str(), tmp});
         cur = tmp;
     }
     else if (kind == "CompoundStmt")
     {
         CompoundStmt *tmp = Mgr::g.make<CompoundStmt>();
-        for (auto it : inner_sons)
-        {
-            tmp->push_back(it);
-        }
+        tmp->stmts = inner_sons;
         cur = tmp;
     }
     else if (kind == "ReturnStmt")
     {
         ReturnStmt *tmp = Mgr::g.make<ReturnStmt>();
-        int flag = inner_sons.size() > 0;
-        tmp->flag = flag;
-        if (flag)
-        {
-            tmp->expr_p = inner_sons[0]->dcast<Expr>();
-        }
+        if (inner_sons.size() > 0)
+            tmp->returnExp = inner_sons[0]->dcast<Expr>();
         cur = tmp;
     }
     else if (kind == "DeclStmt")
     {
         DeclStmt *tmp = Mgr::g.make<DeclStmt>();
-        for (auto it : inner_sons)
-        {
-            tmp->push_back(it->dcast<Decl>());
-        }
+        for (auto p : inner_sons)
+            tmp->decls.push_back(p->dcast<Decl>());
         cur = tmp;
     }
     else if (kind == "ExprStmt")
     {
         ExprStmt *tmp = Mgr::g.make<ExprStmt>();
-        tmp->expr_p = inner_sons[0]->dcast<Expr>();
+        tmp->exp = inner_sons[0]->dcast<Expr>();
         cur = tmp;
     }
     else if (kind == "IfStmt")
     {
         IfStmt *tmp = Mgr::g.make<IfStmt>();
-        tmp->expr_p = inner_sons[0]->dcast<Expr>();
-        tmp->stmt_p_u = inner_sons[1]->dcast<Stmt>();
+        tmp->condExp = inner_sons[0]->dcast<Expr>();
+        tmp->thenStmt = inner_sons[1];
         if (inner_sons.size() > 2)
-        {
-            tmp->flag = 1;
-            tmp->stmt_p_d = inner_sons[2]->dcast<Stmt>();
-        }
+            tmp->elseStmt = inner_sons[2];
         cur = tmp;
     }
     else if (kind == "WhileStmt")
     {
         WhileStmt *tmp = Mgr::g.make<WhileStmt>();
-        tmp->expr_p = inner_sons[0]->dcast<Expr>();
-        tmp->stmt_p = inner_sons[1]->dcast<Stmt>();
+        tmp->condExp = inner_sons[0]->dcast<Expr>();
+        tmp->whileBodyStmt = inner_sons[1];
         cur = tmp;
     }
     else if (kind == "DoStmt")
     {
         DoStmt *tmp = Mgr::g.make<DoStmt>();
-        tmp->stmt_p = inner_sons[0]->dcast<Stmt>();
-        tmp->expr_p = inner_sons[1]->dcast<Expr>();
+        tmp->doBodyStmt = inner_sons[0]->dcast<Stmt>();
+        tmp->condExp = inner_sons[1]->dcast<Expr>();
         cur = tmp;
     }
     else if (kind == "BreakStmt")
@@ -212,7 +179,8 @@ Obj *deserializeJson(const llvm::json::Object *O, Obj *father = std::nullptr_t()
     {
         DeclRefExpr *tmp = Mgr::g.make<DeclRefExpr>();
         std::string id_key = O->getObject("referencedDecl")->getString("id")->str();
-        tmp->decl_p = sym_table[id_key]->dcast<Decl>();
+        tmp->referencedDecl = sym_table[id_key]->dcast<Decl>();
+        tmp->isConst = tmp->referencedDecl->isConst;
         cur = tmp;
     }
     else if (kind == "InitListExpr")
@@ -222,13 +190,9 @@ Obj *deserializeJson(const llvm::json::Object *O, Obj *father = std::nullptr_t()
         for (auto it : inner_sons)
         {
             if (it) // 忽略ImplicitValueInitExpr
-                tmp->push_back(it->dcast<Expr>());
+                tmp->initExps.push_back(it->dcast<Expr>());
         }
-        cur = tmp;
-    }
-    else if (kind == "array_filler") // 不存在？
-    {
-        array_filler *tmp = Mgr::g.make<array_filler>();
+        tmp->isConst = true;
         cur = tmp;
     }
     else if (kind == "ImplicitCastExpr")
@@ -236,77 +200,67 @@ Obj *deserializeJson(const llvm::json::Object *O, Obj *father = std::nullptr_t()
         ImplicitCastExpr *tmp = Mgr::g.make<ImplicitCastExpr>();
         tmp->type = type;
         tmp->castKind = O->getString("castKind")->str();
-        tmp->expr_p = inner_sons[0]->dcast<Expr>();
-        tmp->isLiteral = tmp->expr_p->isLiteral;
+        tmp->toCastExp = inner_sons[0]->dcast<Expr>();
+        tmp->isConst = tmp->toCastExp->isConst;
         cur = tmp;
     }
     else if (kind == "ArraySubscriptExpr")
     {
         ArraySubscriptExpr *tmp = Mgr::g.make<ArraySubscriptExpr>();
         tmp->type = type;
-        tmp->expr_p_l = inner_sons[0]->dcast<Expr>();
-        tmp->expr_p_r = inner_sons[1]->dcast<Expr>();
+        tmp->arrayPointerExp = inner_sons[0]->dcast<Expr>();
+        tmp->indexExp = inner_sons[1]->dcast<Expr>();
         cur = tmp;
     }
     else if (kind == "CallExpr")
     {
         CallExpr *tmp = Mgr::g.make<CallExpr>();
         tmp->type = type;
-        tmp->expr_p = inner_sons[0]->dcast<Expr>();
+        tmp->functionPointerExp = inner_sons[0]->dcast<Expr>();
         inner_sons.erase(inner_sons.begin());
         for (auto it : inner_sons)
-        {
-            tmp->push_back(it->dcast<Expr>());
-        }
+            tmp->parmExps.push_back(it->dcast<Expr>());
         cur = tmp;
     }
     else if (kind == "ParenExpr")
     {
         ParenExpr *tmp = Mgr::g.make<ParenExpr>();
-        tmp->expr_p = inner_sons[0]->dcast<Expr>();
+        tmp->exp = inner_sons[0]->dcast<Expr>();
+        tmp->isConst = tmp->exp->isConst;
         cur = tmp;
     }
     else if (kind == "BinaryOperator")
     {
         BinaryOperator *tmp = Mgr::g.make<BinaryOperator>();
-        tmp->expr_p_l = inner_sons[0]->dcast<Expr>();
-        tmp->expr_p_r = inner_sons[1]->dcast<Expr>();
+        tmp->lExp = inner_sons[0]->dcast<Expr>();
+        tmp->rExp = inner_sons[1]->dcast<Expr>();
         tmp->opcode = O->getString("opcode")->str();
-        tmp->isLiteral = tmp->expr_p_l->isLiteral && tmp->expr_p_r->isLiteral;
+        tmp->isConst = tmp->lExp->isConst && tmp->rExp->isConst;
         tmp->type = type;
         cur = tmp;
     }
     else if (kind == "UnaryOperator")
     {
         UnaryOperator *tmp = Mgr::g.make<UnaryOperator>();
-        tmp->expr_p = inner_sons[0]->dcast<Expr>();
+        tmp->exp = inner_sons[0]->dcast<Expr>();
         tmp->opcode = O->getString("opcode")->str();
         tmp->type = type;
-        tmp->isLiteral = tmp->expr_p->isLiteral;
-        // tmp->getValue();
+        tmp->isConst = tmp->exp->isConst;
         cur = tmp;
     }
     else if (kind == "StringLiteral")
     {
         StringLiteral *tmp = Mgr::g.make<StringLiteral>();
-        tmp->str_value = value.str();
-        tmp->serial = value.str();
-
-        tmp->id = id.str();
         tmp->type = type;
-        tmp->convert();
-        tmp->isLiteral = true;
+        tmp->isConst = true;
+        tmp->strVal = getStrVal(value.str(), (type.dims[0] - 1));
         cur = tmp;
     }
     else if (kind == "FloatingLiteral")
     {
         FloatingLiteral *tmp = Mgr::g.make<FloatingLiteral>();
-        tmp->str_value = value.str();
-        tmp->isLiteral = true;
-        double tmpd;
-        value.getAsDouble(tmpd);
-
-        tmp->value = tmpd;
+        tmp->isConst = true;
+        value.getAsDouble(tmp->V.doubleV);
         tmp->type = type;
         cur = tmp;
     }
@@ -314,14 +268,16 @@ Obj *deserializeJson(const llvm::json::Object *O, Obj *father = std::nullptr_t()
     {
         IntegerLiteral *tmp = Mgr::g.make<IntegerLiteral>();
         tmp->type = type;
-        tmp->isLiteral = true;
-        tmp->str_value = value.str();
+        tmp->isConst = true;
+        value.getAsInteger(0, tmp->V.intV);
         cur = tmp;
     }
     else
     {
         return nullptr; //"ImplicitValueInitExpr"
     }
+
+    cur->id = id.str();
     return cur;
 }
 
@@ -392,4 +348,35 @@ Type getType(const llvm::StringRef qualType)
         tmp.is_ptr = true;
     }
     return tmp;
+}
+
+std::string getStrVal(std::string serial, int length)
+{
+    // 删除"  "
+    serial.erase(serial.begin());
+    serial.pop_back();
+
+    for (int c = 0; c < serial.length(); c++)
+    {
+        if (serial[c] == '\\')
+        {
+            serial.erase(c, 1);
+            switch (serial[c])
+            {
+            case '\\':
+                break;
+            case 'n':
+                serial[c] = '\n';
+                break;
+            case '\"':
+                serial[c] = '\"';
+                break;
+            default:
+                break;
+            }
+        }
+    }
+    while (serial.length() < length)
+        serial.push_back('\00');
+    return serial;
 }
