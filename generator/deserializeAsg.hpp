@@ -82,7 +82,7 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
         if (inner_sons.size() > 0)
             tmp->initExp = inner_sons[0]->dcast<Expr>();
         tmp->type = type;
-        tmp->isConst = type.is_const;
+        tmp->isSingleConst = type.is_const && (type.dims.size() == 0);
         cur = tmp;
     }
     else if (kind == "FunctionDecl")
@@ -180,7 +180,8 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
         DeclRefExpr *tmp = Mgr::g.make<DeclRefExpr>();
         std::string id_key = O->getObject("referencedDecl")->getString("id")->str();
         tmp->referencedDecl = sym_table[id_key]->dcast<Decl>();
-        tmp->isConst = tmp->referencedDecl->isConst;
+        tmp->isSingleConst = tmp->referencedDecl->isSingleConst;
+        tmp->type = type;
         cur = tmp;
     }
     else if (kind == "InitListExpr")
@@ -192,7 +193,7 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
             if (it) // 忽略ImplicitValueInitExpr
                 tmp->initExps.push_back(it->dcast<Expr>());
         }
-        tmp->isConst = true;
+        tmp->isSingleConst = false;
         cur = tmp;
     }
     else if (kind == "ImplicitCastExpr")
@@ -201,7 +202,7 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
         tmp->type = type;
         tmp->castKind = O->getString("castKind")->str();
         tmp->toCastExp = inner_sons[0]->dcast<Expr>();
-        tmp->isConst = tmp->toCastExp->isConst;
+        tmp->isSingleConst = tmp->toCastExp->isSingleConst;
         cur = tmp;
     }
     else if (kind == "ArraySubscriptExpr")
@@ -226,7 +227,7 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
     {
         ParenExpr *tmp = Mgr::g.make<ParenExpr>();
         tmp->exp = inner_sons[0]->dcast<Expr>();
-        tmp->isConst = tmp->exp->isConst;
+        tmp->isSingleConst = tmp->exp->isSingleConst;
         cur = tmp;
     }
     else if (kind == "BinaryOperator")
@@ -235,7 +236,7 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
         tmp->lExp = inner_sons[0]->dcast<Expr>();
         tmp->rExp = inner_sons[1]->dcast<Expr>();
         tmp->opcode = O->getString("opcode")->str();
-        tmp->isConst = tmp->lExp->isConst && tmp->rExp->isConst;
+        tmp->isSingleConst = tmp->lExp->isSingleConst && tmp->rExp->isSingleConst;
         tmp->type = type;
         cur = tmp;
     }
@@ -245,21 +246,21 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
         tmp->exp = inner_sons[0]->dcast<Expr>();
         tmp->opcode = O->getString("opcode")->str();
         tmp->type = type;
-        tmp->isConst = tmp->exp->isConst;
+        tmp->isSingleConst = tmp->exp->isSingleConst;
         cur = tmp;
     }
     else if (kind == "StringLiteral")
     {
         StringLiteral *tmp = Mgr::g.make<StringLiteral>();
         tmp->type = type;
-        tmp->isConst = true;
+        tmp->isSingleConst = false;
         tmp->strVal = getStrVal(value.str(), (type.dims[0] - 1));
         cur = tmp;
     }
     else if (kind == "FloatingLiteral")
     {
         FloatingLiteral *tmp = Mgr::g.make<FloatingLiteral>();
-        tmp->isConst = true;
+        tmp->isSingleConst = true;
         value.getAsDouble(tmp->V.doubleV);
         tmp->type = type;
         cur = tmp;
@@ -268,7 +269,8 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
     {
         IntegerLiteral *tmp = Mgr::g.make<IntegerLiteral>();
         tmp->type = type;
-        tmp->isConst = true;
+        tmp->isSingleConst = true;
+
         value.getAsInteger(0, tmp->V.intV);
         cur = tmp;
     }
@@ -341,7 +343,6 @@ Type getType(const llvm::StringRef qualType)
         tmp.dims.push_back(size);
         arr_type = arr_type.substr(r + 1);
     }
-
     // 判断是否为指针
     if (qualType_rm_qualifier.find('*') != std::string::npos && !tmp.is_func)
     {

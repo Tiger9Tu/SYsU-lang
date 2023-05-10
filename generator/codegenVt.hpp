@@ -37,13 +37,14 @@ public:
             if (auto globInitExp = p->initExp)
             {
                 globInitExp->accept(this);
-
                 if (p->type.dims.size() > 0)
+                {
                     globalVar->setInitializer(llvm::cast<llvm::ConstantArray>(pop()));
+                }
                 else
                 {
                     // 对非数组的全局变量的vardecl 节点赋值，从而进行直接用value进行常量传播（llvm API有bug）
-                    if (p->isConst)
+                    if (p->isSingleConst)
                         castV(&p->V, &globInitExp->V, p->type.base_type, globInitExp->type.base_type);
                     globalVar->setInitializer(llvm::cast<llvm::Constant>(pop()));
                 }
@@ -91,8 +92,8 @@ public:
                 {
                     localInitExp->accept(this);
                     builder_p->CreateStore(pop(), allo);
-                    if (p->isConst)
-                        castV(&p->V, &lovalInitExp->V, p->type.base_type, localInitExp->type.base_type);
+                    if (p->isSingleConst)
+                        castV(&p->V, &localInitExp->V, p->type.base_type, localInitExp->type.base_type);
                 }
             }
         }
@@ -194,15 +195,13 @@ public:
         if (!condVal)
             return -1;
 
-        /*
-        if (condVal->getType()->isFloatTy() && p->expr_p->isConst)
-        {
-            int literalVal = (int)llvmConstToDouble(llvm::cast<llvm::Constant>(condVal));
-            condVal = llvm::ConstantInt::get(*context_p, llvm::APInt(32, literalVal));
-        }
-        */
-
         // Convert condition to a bool by comparing non-equal to 0.0.
+        if (p->condExp->isSingleConst)
+        {
+            long double condLDV = getLDV(&p->condExp->V, p->condExp->type.base_type);
+            condVal = llvm::ConstantInt::get(*context_p, llvm::APInt(1, bool(condLDV))); // true
+        }
+
         if (condVal->getType() != llvm::Type::getInt1Ty(*context_p))
             condVal = builder_p->CreateICmpNE(condVal, llvm::ConstantInt::get(condVal->getType(), 0), "tobool");
 
@@ -268,13 +267,11 @@ public:
         p->condExp->accept(this);
         llvm::Value *condVal = pop();
 
-        /*
-        if (condVal->getType()->isFloatTy() && p->expr_p->isConst)
+        if (p->condExp->isSingleConst)
         {
-            int literalVal = (int)llvmConstToDouble(llvm::cast<llvm::Constant>(condVal));
-            condVal = llvm::ConstantInt::get(*context_p, llvm::APInt(32, literalVal));
+            long double condLDV = getLDV(&p->condExp->V, p->condExp->type.base_type);
+            condVal = llvm::ConstantInt::get(*context_p, llvm::APInt(1, bool(condLDV))); // true
         }
-        */
 
         if (condVal->getType() != llvm::Type::getInt1Ty(*context_p))
             condVal = builder_p->CreateICmpNE(condVal, llvm::ConstantInt::get(condVal->getType(), 0), "tobool");
@@ -315,13 +312,11 @@ public:
         p->condExp->accept(this);
         llvm::Value *condVal = pop();
 
-        /*
-        if (condVal->getType()->isFloatTy() && p->expr_p->isConst)
+        if (p->condExp->isSingleConst)
         {
-            int literalVal = (int)llvmConstToDouble(llvm::cast<llvm::Constant>(condVal));
-            condVal = llvm::ConstantInt::get(*context_p, llvm::APInt(32, literalVal));
+            long double condLDV = getLDV(&p->condExp->V, p->condExp->type.base_type);
+            condVal = llvm::ConstantInt::get(*context_p, llvm::APInt(1, bool(condLDV))); // true
         }
-        */
 
         // Convert condition to a bool by comparing non-equal to 0.0.
         if (condVal->getType() != llvm::Type::getInt1Ty(*context_p))
@@ -352,27 +347,19 @@ public:
 
     int visit(DeclRefExpr *p)
     {
+        if (p->isSingleConst)
+            castV(&p->V, &p->referencedDecl->V, p->type.base_type, p->referencedDecl->type.base_type);
 
         llvm::Value *decl_ref_value;
         if (auto local_var = getOrInsertLocal(p->referencedDecl->id))
-        {
             decl_ref_value = local_var;
-        }
         else if (auto global_value = module_p->getNamedGlobal(p->referencedDecl->name))
-        {
             decl_ref_value = global_value;
-        }
         else if (auto func = module_p->getFunction(p->referencedDecl->name))
             decl_ref_value = func;
         else
             return -1;
-        llvm::errs() << "decl ref value: "
-                     << "\n";
-        if (p->isConst)
-        {
-            castV(&p->V, &p->referencedDecl->V, p->type.base_type, p->referencedDecl->type.base_type);
-        }
-        valueToLLVMValue(&p->V, p->type.base_type)->print(llvm::errs());
+
         value_stack.push_back(decl_ref_value);
         return 1;
     }
@@ -400,79 +387,39 @@ public:
         bool is_global = false;
         if (!builder_p->GetInsertBlock())
             is_global = true;
+
+        if (p->isSingleConst)
+        {
+            castV(&p->V, &p->toCastExp->V, p->type.base_type, p->toCastExp->type.base_type);
+            pop(); // 替换掉栈顶的value*
+            value_stack.push_back(valueToLLVMValue(&p->V, p->type.base_type));
+            return 1;
+        }
         if (p->castKind == "LValueToRValue")
         {
-            if (p->isConst)
+            llvm::Value *tocast = pop();
+            std::string name = "cast";
+            if (auto dre = p->toCastExp->dcast<DeclRefExpr>())
             {
-                castV(&p->V, &p->toCastExp->V, p->type.base_type, p->toCastExp->type.base_type);
-                return 1;
+                if (auto pvd = dre->referencedDecl->dcast<ParmVarDecl>())
+                    name = "parm.arr.cast";
             }
-            else
-            {
-                llvm::Value *tocast = pop();
-                std::string name = "cast";
-                if (auto dre = p->toCastExp->dcast<DeclRefExpr>())
-                {
-                    if (auto pvd = dre->referencedDecl->dcast<ParmVarDecl>())
-                        name = "parm.arr.cast";
-                }
-                value_stack.push_back(builder_p->CreateLoad(typeToLLVMType(&p->type), tocast, name));
-            }
-        }
-        else if (p->castKind == "FloatingToIntegral")
-        {
-            if (p->isConst)
-            {
-                pop();
-                value_stack.push_back(llvm::ConstantInt::get(*context_p,
-                                                             llvm::APInt(32, p->V.intV, 10)));
-            }
-            else
-            {
-                value_stack.push_back(builder_p->CreateFPToSI(pop(), typeToLLVMType(&p->type)));
-            }
-        }
-        else if (p->castKind == "IntegralToFloating")
-        {
-            if (p->isConst)
-            {
-                pop();
-                value_stack.push_back(llvm::ConstantFP::get(*context_p,
-                                                            llvm::APFloat(p->V.floatV))); // warning: 可能是double?
-            }
-            else
-            {
-                value_stack.push_back(builder_p->CreateSIToFP(pop(), typeToLLVMType(&p->type)));
-            }
-        }
-        else if (p->castKind == "FloatingCast")
-        {
-            pop();
-            value_stack.push_back(llvm::ConstantFP::get(*context_p,
-                                                        llvm::APFloat(p->V.floatV)));
+            value_stack.push_back(builder_p->CreateLoad(typeToLLVMType(&p->type), tocast, name));
         }
         else if (p->castKind == "IntegralCast")
         {
-            if (p->isConst)
-            {
-                llvm::ConstantInt *tocast = llvm::cast<llvm::ConstantInt>(pop());
-                long long castVal = tocast->getZExtValue();
-                int numBits = 32;
-                if (p->type.base_type == Type::LONG)
-                {
-                    numBits = 64;
-                }
-
-                value_stack.push_back(llvm::ConstantInt::get(*context_p,
-                                                             llvm::APInt(numBits, castVal)));
-            }
+            if (p->toCastExp->type.base_type == Type::CHAR)
+                value_stack.push_back(builder_p->CreateSExt(pop(), typeToLLVMType(&p->type), "conv"));
             else
-            {
-                if (p->toCastExp->type.base_type == Type::CHAR)
-                    value_stack.push_back(builder_p->CreateSExt(pop(), typeToLLVMType(&p->type)));
-                else
-                    value_stack.push_back(builder_p->CreateTrunc(pop(), typeToLLVMType(&p->type)));
-            }
+                value_stack.push_back(builder_p->CreateTrunc(pop(), typeToLLVMType(&p->type), "conv"));
+        }
+        else if (p->castKind == "IntegralToFloating")
+        {
+            value_stack.push_back(builder_p->CreateSIToFP(pop(), typeToLLVMType(&p->type), "conv"));
+        }
+        else if (p->castKind == "FloatingToIntegral")
+        {
+            value_stack.push_back(builder_p->CreateFPToSI(pop(), typeToLLVMType(&p->type), "conv"));
         }
         return 1;
     }
@@ -539,12 +486,12 @@ public:
 
     int visit(BinaryOperator *p)
     {
-        bool is_const = false;
+        bool isSingleConst = false;
         bool LHS_is_fd = false;
         long double GLHSV, GRHSV;
         llvm::Value *LHS, *RHS;
-        // literal(const val的isConst为 true)直接计算值
-        if (p->isConst)
+        // literal(const val的isSingleConst为 true)直接计算值
+        if (p->isSingleConst)
         {
             p->lExp->accept(this);
             GLHSV = getLDV(&p->lExp->V, p->lExp->type.base_type);
@@ -555,7 +502,7 @@ public:
         // C语言要求进行短路处理
         if (p->opcode == "&&" || p->opcode == "||")
         {
-            if (p->isConst)
+            if (p->isSingleConst)
             {
                 if (p->opcode == "&&")
                     assignV(GLHSV && GRHSV, &p->V, p->type.base_type);
@@ -599,7 +546,7 @@ public:
         }
         else
         {
-            if (!p->isConst)
+            if (!p->isSingleConst)
             {
                 p->lExp->accept(this);
                 LHS = pop();
@@ -612,9 +559,8 @@ public:
                 value_stack.push_back(builder_p->CreateStore(RHS, LHS));
             else if (p->opcode == "+")
             {
-                if (p->isConst)
+                if (p->isSingleConst)
                 {
-                    llvm::errs() << "add GLHSV " << (double)GLHSV << " GRHSV" << (double)GRHSV << " = " << (double)(GLHSV + GRHSV);
                     assignV(GLHSV + GRHSV, &p->V, p->type.base_type);
                 }
                 else
@@ -627,7 +573,7 @@ public:
             }
             else if (p->opcode == "-")
             {
-                if (p->isConst)
+                if (p->isSingleConst)
                     assignV(GLHSV - GRHSV, &p->V, p->type.base_type);
                 else
                 {
@@ -639,7 +585,7 @@ public:
             }
             else if (p->opcode == "*")
             {
-                if (p->isConst)
+                if (p->isSingleConst)
                     assignV(GLHSV * GRHSV, &p->V, p->type.base_type);
                 else
                 {
@@ -651,7 +597,7 @@ public:
             }
             else if (p->opcode == "/")
             {
-                if (p->isConst)
+                if (p->isSingleConst)
                     assignV(GLHSV / GRHSV, &p->V, p->type.base_type);
                 else
                 {
@@ -663,14 +609,14 @@ public:
             }
             else if (p->opcode == "%")
             {
-                if (p->isConst)
+                if (p->isSingleConst)
                     assignV(int(GLHSV) % int(GRHSV), &p->V, p->type.base_type);
                 else
                     value_stack.push_back(builder_p->CreateSRem(LHS, RHS));
             }
             else
             {
-                if (RHS->getType() != LHS->getType())
+                if (!p->isSingleConst && (RHS->getType() != LHS->getType()))
                 {
                     if (LHS->getType() == llvm::Type::getInt1Ty(*context_p))
                         RHS = builder_p->CreateICmpNE(RHS, llvm::ConstantInt::get(RHS->getType(), 0));
@@ -680,7 +626,7 @@ public:
 
                 if (p->opcode == ">")
                 {
-                    if (p->isConst)
+                    if (p->isSingleConst)
                         assignV(GLHSV > GRHSV, &p->V, p->type.base_type);
                     else
                     {
@@ -692,7 +638,7 @@ public:
                 }
                 else if (p->opcode == "<")
                 {
-                    if (p->isConst)
+                    if (p->isSingleConst)
                         assignV(GLHSV < GRHSV, &p->V, p->type.base_type);
                     else
                     {
@@ -704,7 +650,7 @@ public:
                 }
                 else if (p->opcode == ">=")
                 {
-                    if (p->isConst)
+                    if (p->isSingleConst)
                         assignV(GLHSV >= GRHSV, &p->V, p->type.base_type);
                     else
                     {
@@ -716,7 +662,7 @@ public:
                 }
                 else if (p->opcode == "<=")
                 {
-                    if (p->isConst)
+                    if (p->isSingleConst)
                         assignV(GLHSV <= GRHSV, &p->V, p->type.base_type);
                     else
                     {
@@ -728,7 +674,7 @@ public:
                 }
                 else if (p->opcode == "==")
                 {
-                    if (is_const)
+                    if (p->isSingleConst)
                         assignV(GLHSV == GRHSV, &p->V, p->type.base_type);
                     else
                     {
@@ -740,7 +686,7 @@ public:
                 }
                 else if (p->opcode == "!=")
                 {
-                    if (is_const)
+                    if (p->isSingleConst)
                         assignV(GLHSV != GRHSV, &p->V, p->type.base_type);
                     else
                     {
@@ -753,7 +699,7 @@ public:
             }
         }
 
-        if (p->isConst)
+        if (p->isSingleConst)
             value_stack.push_back(valueToLLVMValue(&p->V, p->type.base_type));
         return 1;
     }
@@ -763,14 +709,14 @@ public:
         p->exp->accept(this);
         llvm::Value *HS;
         long double HSV;
-        if (p->isConst)
+        if (p->isSingleConst)
             HSV = getLDV(&p->exp->V, p->type.base_type);
         else
             HS = pop();
 
         if (p->opcode == "!")
         {
-            if (p->isConst)
+            if (p->isSingleConst)
                 assignV(!(int)HSV, &p->V, p->type.base_type);
             else
             {
@@ -781,7 +727,7 @@ public:
         }
         else if (p->opcode == "-")
         {
-            if (p->isConst)
+            if (p->isSingleConst)
                 assignV(-HSV, &p->V, p->type.base_type);
             else
             {
@@ -793,13 +739,13 @@ public:
         }
         else if (p->opcode == "+")
         {
-            if (p->isConst)
+            if (p->isSingleConst)
                 assignV(HSV, &p->V, p->type.base_type);
             else
                 value_stack.push_back(HS);
         }
 
-        if (p->isConst)
+        if (p->isSingleConst)
             value_stack.push_back(valueToLLVMValue(&p->V, p->type.base_type));
         return 1;
     }
@@ -999,11 +945,11 @@ private:
         case 2:
             return llvm::ConstantInt::get(*context_p, llvm::APInt(32, V->intV));
         case 3:
-            return llvm::ConstantInt::get(*context_p, llvm::APInt(32, V->unsignedIntV));
+            return llvm::ConstantInt::get(*context_p, llvm::APInt(32, V->unsignedIntV, true));
         case 4:
             return llvm::ConstantInt::get(*context_p, llvm::APInt(64, V->longV));
         case 5:
-            return llvm::ConstantInt::get(*context_p, llvm::APInt(64, V->unsignedLongV));
+            return llvm::ConstantInt::get(*context_p, llvm::APInt(64, V->unsignedLongV, true));
         case 6:
             return llvm::ConstantInt::get(*context_p, llvm::APInt(128, V->longLongV));
         case 7:

@@ -143,7 +143,7 @@ struct Expr
     } V;
 
     std::string serial;
-    bool isConst = false;
+    bool isSingleConst = false;
     enum ValueCatagory
     {
         LVALUE,
@@ -173,6 +173,7 @@ struct InitListExpr
     : public Expr
 {
     std::vector<Expr *> initExps;
+    int accept(Visitor *pv) final { return pv->visit(this); }
 };
 
 struct DeclRefExpr
