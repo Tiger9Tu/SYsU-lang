@@ -395,6 +395,7 @@ public:
             value_stack.push_back(valueToLLVMValue(&p->V, p->type.base_type));
             return 1;
         }
+
         if (p->castKind == "LValueToRValue")
         {
             llvm::Value *tocast = pop();
@@ -759,7 +760,7 @@ public:
     int visit(StringLiteral *p)
     {
         llvm::Constant *strVal = llvm::ConstantDataArray::getString(*context_p,
-                                                                    p->serial);
+                                                                    p->strVal);
         llvm::Value *globStrVal = new llvm::GlobalVariable(*module_p,
                                                            strVal->getType(),
                                                            true,
@@ -860,80 +861,6 @@ private:
             }
         }
         return llvm_ret_type;
-    }
-
-    long double getLDV(Expr::value *V, Type::BaseType &bType)
-    {
-        switch (bType)
-        {
-        case 0: // void
-            return -1;
-        case 1:
-            return V->charV;
-        case 2:
-            return V->intV;
-        case 3:
-            return V->unsignedIntV;
-        case 4:
-            return V->longV;
-        case 5:
-            return V->unsignedLongV;
-        case 6:
-            return V->longLongV;
-        case 7:
-            return V->floatV;
-        case 8:
-            return V->doubleV;
-        default:
-            return -1;
-        }
-        return -1;
-    }
-
-    void assignV(long double buffer, Expr::value *V, Type::BaseType &bType)
-    {
-        switch (bType)
-        {
-        case 0:
-            assert(false);
-        case 1:
-            V->charV = buffer;
-            break;
-        case 2:
-            V->intV = buffer;
-            break;
-        case 3:
-            V->unsignedIntV = buffer;
-            break;
-        case 4:
-            V->longV = buffer;
-            break;
-        case 5:
-            V->unsignedLongV = buffer;
-            break;
-        case 6:
-            V->longLongV = buffer;
-            break;
-        case 7:
-        {
-            V->floatV = buffer;
-            break;
-        }
-        case 8:
-            V->doubleV = buffer;
-            break;
-        default:
-            assert(false);
-        }
-    }
-
-    void castV(Expr::value *resV,
-               Expr::value *toCastV,
-               Type::BaseType &resBaseType,
-               Type::BaseType &toCastBaseType)
-    {
-        long double buffer = getLDV(toCastV, toCastBaseType);
-        assignV(buffer, resV, resBaseType);
     }
 
     llvm::Value *valueToLLVMValue(Expr::value *V, Type::BaseType &bType)

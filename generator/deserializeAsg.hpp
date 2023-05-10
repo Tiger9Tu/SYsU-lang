@@ -7,6 +7,17 @@ std::unordered_map<std::string, Stmt *> sym_table;
 Type getType(const llvm::StringRef qualType);
 std::string getStrVal(std::string serial, int length);
 
+long double getLDV(Expr::value *V, Type::BaseType &bType);
+void assignV(long double buffer,
+             Expr::value *V,
+             Type::BaseType &bType,
+             Type::BaseType toCastType = Type::VOID);
+
+void castV(Expr::value *resV,
+           Expr::value *toCastV,
+           Type::BaseType &resBaseType,
+           Type::BaseType &toCastBaseType);
+
 Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t())
 {
     Stmt *cur;
@@ -271,7 +282,9 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
         tmp->type = type;
         tmp->isSingleConst = true;
 
-        value.getAsInteger(0, tmp->V.intV);
+        llvm::APInt tmpV(128, value, 10);
+        double buffer = tmpV.getSExtValue();
+        assignV(buffer, &tmp->V, tmp->type.base_type);
         cur = tmp;
     }
     else
@@ -380,4 +393,88 @@ std::string getStrVal(std::string serial, int length)
     while (serial.length() < length)
         serial.push_back('\00');
     return serial;
+}
+
+long double getLDV(Expr::value *V, Type::BaseType &bType)
+{
+    switch (bType)
+    {
+    case 0: // void
+        return -1;
+    case 1:
+        return V->charV;
+    case 2:
+        return V->intV;
+    case 3:
+        return V->unsignedIntV;
+    case 4:
+        return V->longV;
+    case 5:
+        return V->unsignedLongV;
+    case 6:
+        return V->longLongV;
+    case 7:
+        return V->floatV;
+    case 8:
+        return V->doubleV;
+    default:
+        return -1;
+    }
+    return -1;
+}
+
+void assignV(long double buffer,
+             Expr::value *V,
+             Type::BaseType &bType,
+             Type::BaseType toCastType)
+{
+    if (toCastType == Type::UNSIGNED_INT)
+    {
+
+        V->intV = (unsigned int)buffer; // warning!; to pass test 100_int
+        return;
+    }
+
+    switch (bType)
+    {
+    case 0:
+        assert(false);
+    case 1:
+        V->charV = buffer;
+        break;
+    case 2:
+        V->intV = buffer;
+        break;
+    case 3:
+        V->unsignedIntV = buffer;
+        break;
+    case 4:
+        V->longV = buffer;
+        break;
+    case 5:
+        V->unsignedLongV = buffer;
+        break;
+    case 6:
+        V->longLongV = buffer;
+        break;
+    case 7:
+    {
+        V->floatV = buffer;
+        break;
+    }
+    case 8:
+        V->doubleV = buffer;
+        break;
+    default:
+        assert(false);
+    }
+}
+
+void castV(Expr::value *resV,
+           Expr::value *toCastV,
+           Type::BaseType &resBaseType,
+           Type::BaseType &toCastBaseType)
+{
+    long double buffer = getLDV(toCastV, toCastBaseType);
+    assignV(buffer, resV, resBaseType, toCastBaseType);
 }
