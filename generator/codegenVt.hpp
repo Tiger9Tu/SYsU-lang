@@ -422,6 +422,13 @@ public:
         {
             value_stack.push_back(builder_p->CreateFPToSI(pop(), typeToLLVMType(&p->type), "conv"));
         }
+        else if (p->castKind == "FloatingCast")
+        {
+            if (p->toCastExp->type.base_type == Type::FLOAT && p->type.base_type == Type::DOUBLE)
+                value_stack.push_back(builder_p->CreateFPExt(pop(), typeToLLVMType(&p->type), "conv"));
+            else
+                value_stack.push_back(builder_p->CreateFPTrunc(pop(), typeToLLVMType(&p->type), "conv"));
+        }
         return 1;
     }
 

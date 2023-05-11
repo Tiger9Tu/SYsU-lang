@@ -1,23 +1,39 @@
 #include <sysy/sylib.h>
-const int width = 8;
-const int height = 4;
-int image_in[width * height];
-int image_out[width * height];
+//gcc dead-code-elimination.c sylib.c -include sylib.h -Wall -Wno-unused-result -Wno-unused-variable -o binary-dead-code-elimination && time ./binary-dead-code-elimination < dead-code-elimination.in
+int loopCount = 0;
+int global = 0;
+
+void func(int i0)
+{
+  global = i0;
+  return;
+}
 
 int main()
 {
+  int sum = 0;
   int i = 0;
-  int j = 0;
-  int num = getarray(image_in);
-
-  while (j < width)
+  loopCount = getint();
+  starttime();
+  
+  while(i<loopCount)
   {
-    // image_out[j] = image_in[j];
-    image_out[(height - 1) * width + j] = image_in[(height - 1) * width + j];
-    j = j + 1;
+    int tmp = 0;
+    int j = 0;
+    while(j<60)
+    {
+      func(i);
+      tmp = tmp + global;
+      j = j + 1;
+    }
+    tmp = tmp / 60;
+    sum = sum + tmp;
+    sum = sum % 134209537;
+    i = i + 1;
   }
-  // putarray(width * height, image_in);
+  
   stoptime();
-
-  return 1;
+  putint(sum);
+  putch(10);
+  return 0;
 }
