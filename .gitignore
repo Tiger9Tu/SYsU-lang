@@ -1,5 +1,6 @@
 .vscode
 ign
+tester
 
 CMakeLists.txt.user
 CMakeCache.txt

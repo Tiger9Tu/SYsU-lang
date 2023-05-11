@@ -239,6 +239,7 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
         ParenExpr *tmp = Mgr::g.make<ParenExpr>();
         tmp->exp = inner_sons[0]->dcast<Expr>();
         tmp->isSingleConst = tmp->exp->isSingleConst;
+        tmp->type = type;
         cur = tmp;
     }
     else if (kind == "BinaryOperator")

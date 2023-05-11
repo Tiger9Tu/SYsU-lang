@@ -482,7 +482,10 @@ public:
 
     int visit(ParenExpr *p)
     {
-        return p->exp->accept(this);
+        p->exp->accept(this);
+        if (p->isSingleConst)
+            castV(&p->V, &p->exp->V, p->type.base_type, p->exp->type.base_type);
+        return 1;
     }
 
     int visit(BinaryOperator *p)
@@ -575,7 +578,9 @@ public:
             else if (p->opcode == "-")
             {
                 if (p->isSingleConst)
+                {
                     assignV(GLHSV - GRHSV, &p->V, p->type.base_type);
+                }
                 else
                 {
                     if (LHS_is_fd)
@@ -587,7 +592,9 @@ public:
             else if (p->opcode == "*")
             {
                 if (p->isSingleConst)
+                {
                     assignV(GLHSV * GRHSV, &p->V, p->type.base_type);
+                }
                 else
                 {
                     if (LHS_is_fd)
