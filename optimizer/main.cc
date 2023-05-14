@@ -5,7 +5,8 @@
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/raw_ostream.h>
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
   llvm::cl::OptionCategory CallCounterCategory{"call counter options"};
 
   llvm::cl::opt<decltype(llvm::StringRef("").str())> InputModule{
@@ -29,19 +30,25 @@ int main(int argc, char **argv) {
   llvm::LLVMContext Ctx;
   auto M = llvm::parseIRFile(InputModule.getValue(), Err, Ctx);
 
-  if (!M) {
+  if (!M)
+  {
     llvm::errs() << "Error reading bitcode file: " << InputModule << "\n";
     Err.print(argv[0], llvm::errs());
     return -1;
   }
 
-  // Create a module pass manager and add StaticCallCounterPrinter to it.
-  llvm::ModulePassManager MPM;
-  MPM.addPass(sysu::StaticCallCounterPrinter(llvm::errs()));
-
   // Create an analysis manager and register StaticCallCounter with it.
   llvm::ModuleAnalysisManager MAM;
-  MAM.registerPass([&] { return sysu::StaticCallCounter(); });
+  llvm::LoopAnalysisManager LAM;
+  llvm::CGSCCAnalysisManager CGAM;
+  llvm::FunctionAnalysisManager FAM;
+  MAM.registerPass([&]
+                   { return sysu::StaticCallCounter(); });
+  MAM.registerPass([&]
+                   { return llvm::FunctionAnalysisManagerModuleProxy(FAM); });
+
+  FAM.registerPass([&]
+                   { return llvm::BasicAA(); });
 
   // Register all available module analysis passes defined in PassRegisty.def.
   // We only really need PassInstrumentationAnalysis (which is pulled by
@@ -49,10 +56,29 @@ int main(int argc, char **argv) {
   // the _heavy-lifting_.
   llvm::PassBuilder PB;
   PB.registerModuleAnalyses(MAM);
+  PB.registerFunctionAnalyses(FAM);
+  PB.registerCGSCCAnalyses(CGAM);
+  PB.registerLoopAnalyses(LAM);
+  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
 
-  // Finally, run the passes registered with MPM
+  // Create a module pass manager and add StaticCallCounterPrinter to it.
+  llvm::ModulePassManager MPM;
+  MPM.addPass(sysu::StaticCallCounterPrinter(llvm::errs()));
+
+  llvm::FunctionPassManager FPM;
+  FPM.addPass(sysu::FunctionDCE());
+  // FPM.addPass(sysu::CSE());
+  // FPM.addPass(sysu::DCE());
+  // FPM.addPass(sysu::InstSimplify()); // 对于有符号整数我们不能用移位代替，否则会出错
+  // FPM.addPass(sysu::InstComb());
+
+  for (auto F = M->getFunctionList().begin(); F != M->getFunctionList().end(); ++F)
+  {
+    FPM.run(*F, FAM);
+  }
+
   MPM.run(*M, MAM);
-
+  llvm::errs() << "In main!!!\n";
   M->print(llvm::outs(), nullptr);
   return 0;
 }

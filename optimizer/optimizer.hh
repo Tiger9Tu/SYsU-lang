@@ -9,36 +9,65 @@
 #include <llvm/Pass.h>
 #include <llvm/Passes/PassPlugin.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Analysis/AliasAnalysis.h>
 
-namespace sysu {
+#include <llvm/Transforms/Scalar/DCE.h>
+#include <llvm/ADT/SetVector.h>
+#include <llvm/ADT/Statistic.h>
+#include <llvm/Analysis/TargetLibraryInfo.h>
+#include <llvm/IR/InstIterator.h>
+#include <llvm/IR/Instruction.h>
+#include <llvm/InitializePasses.h>
+#include <llvm/Pass.h>
+#include <llvm/Support/DebugCounter.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Utils/AssumeBundleBuilder.h>
+#include <llvm/Transforms/Utils/BasicBlockUtils.h>
+#include <llvm/Transforms/Utils/Local.h>
+// using namespace llvm;
 
-class StaticCallCounter : public llvm::AnalysisInfoMixin<StaticCallCounter> {
-public:
-  using Result = llvm::MapVector<const llvm::Function *, unsigned>;
-  Result run(llvm::Module &M, llvm::ModuleAnalysisManager &);
+namespace sysu
+{
 
-private:
-  // A special type used by analysis passes to provide an address that
-  // identifies that particular analysis pass type.
-  static llvm::AnalysisKey Key;
-  friend struct llvm::AnalysisInfoMixin<StaticCallCounter>;
-};
+  class StaticCallCounter : public llvm::AnalysisInfoMixin<StaticCallCounter>
+  {
+  public:
+    using Result = llvm::MapVector<const llvm::Function *, unsigned>;
+    Result run(llvm::Module &M, llvm::ModuleAnalysisManager &);
 
-class StaticCallCounterPrinter
-    : public llvm::PassInfoMixin<StaticCallCounterPrinter> {
-public:
-  explicit StaticCallCounterPrinter(llvm::raw_ostream &OutS) : OS(OutS) {}
-  llvm::PreservedAnalyses run(llvm::Module &M,
-                              llvm::ModuleAnalysisManager &MAM);
+  private:
+    // A special type used by analysis passes to provide an address that
+    // identifies that particular analysis pass type.
+    static llvm::AnalysisKey Key;
+    friend struct llvm::AnalysisInfoMixin<StaticCallCounter>;
+  };
 
-private:
-  llvm::raw_ostream &OS;
-};
+  class StaticCallCounterPrinter
+      : public llvm::PassInfoMixin<StaticCallCounterPrinter>
+  {
+  public:
+    explicit StaticCallCounterPrinter(llvm::raw_ostream &OutS) : OS(OutS) {}
+    llvm::PreservedAnalyses run(llvm::Module &M,
+                                llvm::ModuleAnalysisManager &MAM);
+
+  private:
+    llvm::raw_ostream &OS;
+  };
+
+  class FunctionDCE : public llvm::PassInfoMixin<FunctionDCE>
+  {
+  public:
+    using Result = llvm::PreservedAnalyses;
+    Result run(llvm::Function &M, llvm::FunctionAnalysisManager &FAM);
+
+  private:
+  };
 
 } // namespace sysu
 
-extern "C" {
-llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK llvmGetPassPluginInfo();
+extern "C"
+{
+  llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK llvmGetPassPluginInfo();
 }
 
 #endif

@@ -4,7 +4,8 @@
 
 llvm::PreservedAnalyses
 sysu::StaticCallCounterPrinter::run(llvm::Module &M,
-                                    llvm::ModuleAnalysisManager &MAM) {
+                                    llvm::ModuleAnalysisManager &MAM)
+{
 
   auto DirectCalls = MAM.getResult<sysu::StaticCallCounter>(M);
 
@@ -15,7 +16,8 @@ sysu::StaticCallCounterPrinter::run(llvm::Module &M,
   OS << llvm::format("%-20s %-10s\n", str1, str2);
   OS << "-------------------------------------------------\n";
 
-  for (auto &CallCount : DirectCalls) {
+  for (auto &CallCount : DirectCalls)
+  {
     OS << llvm::format("%-20s %-10lu\n",
                        CallCount.first->getName().str().c_str(),
                        CallCount.second);
@@ -26,29 +28,36 @@ sysu::StaticCallCounterPrinter::run(llvm::Module &M,
 }
 
 sysu::StaticCallCounter::Result
-sysu::StaticCallCounter::run(llvm::Module &M, llvm::ModuleAnalysisManager &) {
+sysu::StaticCallCounter::run(llvm::Module &M, llvm::ModuleAnalysisManager &)
+{
   llvm::MapVector<const llvm::Function *, unsigned> Res;
 
-  for (auto &Func : M) {
-    for (auto &BB : Func) {
-      for (auto &Ins : BB) {
+  for (auto &Func : M)
+  {
+    for (auto &BB : Func)
+    {
+      for (auto &Ins : BB)
+      {
 
         // If this is a call instruction then CB will be not null.
         auto *CB = llvm::dyn_cast<llvm::CallBase>(&Ins);
-        if (nullptr == CB) {
+        if (nullptr == CB)
+        {
           continue;
         }
 
         // If CB is a direct function call then DirectInvoc will be not null.
         auto DirectInvoc = CB->getCalledFunction();
-        if (nullptr == DirectInvoc) {
+        if (nullptr == DirectInvoc)
+        {
           continue;
         }
 
         // We have a direct function call - update the count for the function
         // being called.
         auto CallCount = Res.find(DirectInvoc);
-        if (Res.end() == CallCount) {
+        if (Res.end() == CallCount)
+        {
           CallCount = Res.insert({DirectInvoc, 0}).first;
         }
         ++CallCount->second;
@@ -61,26 +70,106 @@ sysu::StaticCallCounter::run(llvm::Module &M, llvm::ModuleAnalysisManager &) {
 
 llvm::AnalysisKey sysu::StaticCallCounter::Key;
 
-extern "C" {
-llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK llvmGetPassPluginInfo() {
-  return {LLVM_PLUGIN_API_VERSION, "sysu-optimizer-pass", LLVM_VERSION_STRING,
-          [](llvm::PassBuilder &PB) {
-            // #1 REGISTRATION FOR "opt -passes=sysu-optimizer-pass"
-            PB.registerPipelineParsingCallback(
-                [&](llvm::StringRef Name, llvm::ModulePassManager &MPM,
-                    llvm::ArrayRef<llvm::PassBuilder::PipelineElement>) {
-                  if (Name == "sysu-optimizer-pass") {
-                    MPM.addPass(sysu::StaticCallCounterPrinter(llvm::errs()));
-                    return true;
-                  }
-                  return false;
-                });
-            // #2 REGISTRATION FOR
-            // "MAM.getResult<sysu::StaticCallCounter>(Module)"
-            PB.registerAnalysisRegistrationCallback(
-                [](llvm::ModuleAnalysisManager &MAM) {
-                  MAM.registerPass([&] { return sysu::StaticCallCounter(); });
-                });
-          }};
+//===--------------------------------------------------------------------===//
+// DeadCodeElimination pass implementation
+//
+
+static bool DCEInstruction(llvm::Instruction *I,
+                           llvm::SmallSetVector<llvm::Instruction *, 16> &WorkList,
+                           const llvm::TargetLibraryInfo *TLI)
+{
+  if (llvm::isInstructionTriviallyDead(I, TLI))
+  {
+
+    // llvm::salvageDebugInfo(*I);
+    //  llvm::salvageKnowledge(I);
+
+    // Null out all of the instruction's operands to see if any operand becomes
+    // dead as we go.
+    for (unsigned i = 0, e = I->getNumOperands(); i != e; ++i)
+    {
+      llvm::Value *OpV = I->getOperand(i);
+      I->setOperand(i, nullptr);
+
+      if (!OpV->use_empty() || I == OpV)
+        continue;
+
+      // If the operand is an instruction that became dead as we nulled out the
+      // operand, and if it is 'trivially' dead, delete it in a future loop
+      // iteration.
+      if (llvm::Instruction *OpI = llvm::dyn_cast<llvm::Instruction>(OpV))
+        if (llvm::isInstructionTriviallyDead(OpI, TLI))
+          WorkList.insert(OpI);
+    }
+    llvm::errs() << "erase";
+    I->print(llvm::errs());
+    I->eraseFromParent();
+    //++DCEEliminated;
+    return true;
+  }
+  return false;
 }
+
+static bool eliminateDeadCode(llvm::Function &F, llvm::TargetLibraryInfo *TLI)
+{
+  bool MadeChange = false;
+  llvm::SmallSetVector<llvm::Instruction *, 16> WorkList;
+  // Iterate over the original function, only adding insts to the worklist
+  // if they actually need to be revisited. This avoids having to pre-init
+  // the worklist with the entire function's worth of instructions.
+  for (llvm::Instruction &I : llvm::make_early_inc_range(instructions(F)))
+  {
+    // We're visiting this instruction now, so make sure it's not in the
+    // worklist from an earlier visit.
+    if (!WorkList.count(&I))
+      MadeChange |= DCEInstruction(&I, WorkList, TLI);
+  }
+
+  while (!WorkList.empty())
+  {
+    llvm::Instruction *I = WorkList.pop_back_val();
+    MadeChange |= DCEInstruction(I, WorkList, TLI);
+  }
+  return MadeChange;
+}
+
+llvm::PreservedAnalyses sysu::FunctionDCE::run(llvm::Function &F, llvm::FunctionAnalysisManager &AM)
+{
+  if (!eliminateDeadCode(F, &AM.getResult<llvm::TargetLibraryAnalysis>(F)))
+    return llvm::PreservedAnalyses::all();
+
+  llvm::PreservedAnalyses PA;
+  PA.preserveSet<llvm::CFGAnalyses>();
+  return PA;
+}
+
+extern "C"
+{
+  llvm::PassPluginLibraryInfo LLVM_ATTRIBUTE_WEAK llvmGetPassPluginInfo()
+  {
+    return {LLVM_PLUGIN_API_VERSION, "sysu-optimizer-pass", LLVM_VERSION_STRING,
+            [](llvm::PassBuilder &PB)
+            {
+              // #1 REGISTRATION FOR "opt -passes=sysu-optimizer-pass"
+              PB.registerPipelineParsingCallback(
+                  [&](llvm::StringRef Name, llvm::ModulePassManager &MPM,
+                      llvm::ArrayRef<llvm::PassBuilder::PipelineElement>)
+                  {
+                    if (Name == "sysu-optimizer-pass")
+                    {
+                      MPM.addPass(sysu::StaticCallCounterPrinter(llvm::errs()));
+                      return true;
+                    }
+                    return false;
+                  });
+              // #2 REGISTRATION FOR
+              // "MAM.getResult<sysu::StaticCallCounter>(Module)"
+              PB.registerAnalysisRegistrationCallback(
+                  [](llvm::ModuleAnalysisManager &MAM)
+                  {
+                    MAM.registerPass([&]
+                                     { return sysu::StaticCallCounter(); });
+                  });
+            }};
+  }
 }
