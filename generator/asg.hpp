@@ -70,7 +70,6 @@ public:
 public:
     virtual int accept(Visitor *)
     {
-        assert(false);
         return -1;
     };
 
@@ -119,8 +118,6 @@ public:
     std::vector<int> dims;
 };
 
-////////////////////////////////////midtype///////////////////////////////////
-
 struct Stmt
     : public Obj
 {
@@ -158,8 +155,6 @@ struct Decl
 {
     std::string name;
 };
-
-/////////////////////////////////////////////expr//////////////////////////////////////
 
 struct ImplicitCastExpr
     : public Expr
@@ -263,8 +258,6 @@ struct CallExpr // func(a,1)
     std::vector<Expr *> parmExps;
     int accept(Visitor *pv) final { return pv->visit(this); }
 };
-
-/////////////////////////////////////////////stmt//////////////////////////////////////
 
 struct ReturnStmt
     : public Stmt

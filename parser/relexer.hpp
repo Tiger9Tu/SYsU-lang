@@ -6,11 +6,8 @@
 
 namespace {
 auto llvmin = llvm::MemoryBuffer::getFileOrSTDIN("-");
-
 auto input = llvmin.get() -> getBuffer();
-
 auto end = input.end(), it = input.begin();
-
 auto wk_getline(char endline = "\n"[0]) {
     auto beg = it;
     while (it != end && *it != endline)

@@ -18,12 +18,13 @@
 #include <llvm/IR/InstIterator.h>
 #include <llvm/IR/Instruction.h>
 #include <llvm/InitializePasses.h>
-#include <llvm/Pass.h>
 #include <llvm/Support/DebugCounter.h>
+#include <llvm/Support/Debug.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/AssumeBundleBuilder.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 #include <llvm/Transforms/Utils/Local.h>
+
 // using namespace llvm;
 
 namespace sysu
@@ -59,8 +60,6 @@ namespace sysu
   public:
     using Result = llvm::PreservedAnalyses;
     Result run(llvm::Function &M, llvm::FunctionAnalysisManager &FAM);
-
-  private:
   };
 
 } // namespace sysu

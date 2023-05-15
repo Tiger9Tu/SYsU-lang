@@ -6,7 +6,6 @@ llvm::PreservedAnalyses
 sysu::StaticCallCounterPrinter::run(llvm::Module &M,
                                     llvm::ModuleAnalysisManager &MAM)
 {
-
   auto DirectCalls = MAM.getResult<sysu::StaticCallCounter>(M);
 
   OS << "=================================================\n";
@@ -74,15 +73,49 @@ llvm::AnalysisKey sysu::StaticCallCounter::Key;
 // DeadCodeElimination pass implementation
 //
 
-static bool DCEInstruction(llvm::Instruction *I,
-                           llvm::SmallSetVector<llvm::Instruction *, 16> &WorkList,
-                           const llvm::TargetLibraryInfo *TLI)
+bool isInstructionDead(llvm::Instruction *I,
+                       const llvm::TargetLibraryInfo *TLI = (const llvm::TargetLibraryInfo *)nullptr)
 {
   if (llvm::isInstructionTriviallyDead(I, TLI))
   {
 
-    // llvm::salvageDebugInfo(*I);
-    //  llvm::salvageKnowledge(I);
+    if (I->hasNUsesOrMore(1))
+      return false;
+
+    switch (I->getOpcode())
+    {
+    case llvm::Instruction::Ret:
+    // case llvm::Instruction::Alloca:
+    case llvm::Instruction::Br:
+    case llvm::Instruction::Switch:
+    case llvm::Instruction::IndirectBr:
+    case llvm::Instruction::Invoke:
+    case llvm::Instruction::Unreachable:
+    case llvm::Instruction::Fence:
+    case llvm::Instruction::Call:
+    case llvm::Instruction::Store:
+    case llvm::Instruction::AtomicCmpXchg:
+    case llvm::Instruction::AtomicRMW:
+    case llvm::Instruction::Resume:
+    case llvm::Instruction::LandingPad:
+      return false;
+    case llvm::Instruction::Load:
+      return !llvm::dyn_cast<llvm::LoadInst>(I)->isVolatile();
+    default:
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool DCEInstruction(llvm::Instruction *I,
+                           llvm::SmallSetVector<llvm::Instruction *, 16> &WorkList,
+                           const llvm::TargetLibraryInfo *TLI)
+{
+  if (isInstructionDead(I, TLI))
+  {
+    llvm::salvageDebugInfo(*I);
+    llvm::salvageKnowledge(I);
 
     // Null out all of the instruction's operands to see if any operand becomes
     // dead as we go.
@@ -101,8 +134,6 @@ static bool DCEInstruction(llvm::Instruction *I,
         if (llvm::isInstructionTriviallyDead(OpI, TLI))
           WorkList.insert(OpI);
     }
-    llvm::errs() << "erase";
-    I->print(llvm::errs());
     I->eraseFromParent();
     //++DCEEliminated;
     return true;

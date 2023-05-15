@@ -4,6 +4,7 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/raw_ostream.h>
+#include <unistd.h>
 
 int main(int argc, char **argv)
 {
@@ -78,7 +79,6 @@ int main(int argc, char **argv)
   }
 
   MPM.run(*M, MAM);
-  llvm::errs() << "In main!!!\n";
   M->print(llvm::outs(), nullptr);
   return 0;
 }

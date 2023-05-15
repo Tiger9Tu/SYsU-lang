@@ -20,8 +20,17 @@ void castV(Expr::value *resV,
 
 Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t())
 {
+
     Stmt *cur;
-    auto id = *(O->getString("id")); // for symbol table key
+
+    // get id from my parser or clang
+    static int cur_id = 0;
+    llvm::StringRef id;
+    if (auto clang_id = O->getString("id"))
+        id = *clang_id;
+    else
+        id = llvm::StringRef(std::to_string(cur_id++));
+
     auto kind = *(O->getString("kind"));
     auto value = *(O->getString("value"));
     auto name_p = (O->getString("name"));
@@ -67,6 +76,7 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
 
     if (auto array_filler = O->getArray("array_filler"))
     {
+
         for (int i = 0; i < array_filler->size(); i++)
         {
             // array_filler和inner同样处理
