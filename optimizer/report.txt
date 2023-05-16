@@ -1,0 +1,7 @@
+
+死代码消除：
+1.
+在deserialize阶段分析出部分需要的信息：如一个变量是否被用到。(dead code样例无法用generator)
+在codegenVistor中，如果一个declstmt定义的变量没有用，则直接跳过。
+2.
+调用api进行pass阶段分析，这个阶段可以处理一些不必要的计算

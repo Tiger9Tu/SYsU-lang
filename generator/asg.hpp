@@ -153,6 +153,7 @@ struct Expr
 struct Decl
     : public Expr
 {
+    bool isUsed = false;
     std::string name;
 };
 

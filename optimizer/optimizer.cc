@@ -93,7 +93,7 @@ bool isInstructionDead(llvm::Instruction *I,
     case llvm::Instruction::Unreachable:
     case llvm::Instruction::Fence:
     case llvm::Instruction::Call:
-    case llvm::Instruction::Store:
+    // case llvm::Instruction::Store:
     case llvm::Instruction::AtomicCmpXchg:
     case llvm::Instruction::AtomicRMW:
     case llvm::Instruction::Resume:
@@ -112,7 +112,7 @@ static bool DCEInstruction(llvm::Instruction *I,
                            llvm::SmallSetVector<llvm::Instruction *, 16> &WorkList,
                            const llvm::TargetLibraryInfo *TLI)
 {
-  if (isInstructionDead(I, TLI))
+  if (llvm::isInstructionTriviallyDead(I, TLI))
   {
     llvm::salvageDebugInfo(*I);
     llvm::salvageKnowledge(I);

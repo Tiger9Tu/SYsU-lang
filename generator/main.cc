@@ -10,6 +10,7 @@
 #include "codegenVt.hpp"
 #include <iostream>
 #include <unistd.h>
+#include <iostream>
 #define DEBUG 0
 
 Mgr Mgr::g;

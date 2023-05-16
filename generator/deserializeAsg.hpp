@@ -201,6 +201,7 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
         DeclRefExpr *tmp = Mgr::g.make<DeclRefExpr>();
         std::string id_key = O->getObject("referencedDecl")->getString("id")->str();
         tmp->referencedDecl = sym_table[id_key]->dcast<Decl>();
+        tmp->referencedDecl->isUsed = true; // both function ref and var ref
         tmp->isSingleConst = tmp->referencedDecl->isSingleConst;
         tmp->type = type;
         cur = tmp;

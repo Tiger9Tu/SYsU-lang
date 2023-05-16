@@ -30,6 +30,10 @@ public:
 
     int visit(VarDecl *p)
     {
+        // opt
+        if (p->isUsed == false)
+            return 1;
+
         if (p->is_global)
         {
             module_p->getOrInsertGlobal(p->name, typeToLLVMType(&p->type));
@@ -102,6 +106,11 @@ public:
 
     int visit(FunctionDecl *p)
     {
+        // opt
+        if (p->isUsed == false && p->name != "main"){
+            return 1;
+        }
+
         llvm::Function *function_value = llvm::Function::Create(reinterpret_cast<llvm::FunctionType *>(typeToLLVMType(&p->type)),
                                                                 llvm::Function::ExternalLinkage,
                                                                 p->name,
@@ -953,8 +962,11 @@ private:
         // 为函数内所有位置的局部变量分配空间
         for (auto localvar : p->localVars)
         {
-            llvm::AllocaInst *allo = builder_p->CreateAlloca(typeToLLVMType(&localvar->type), nullptr, localvar->name);
-            getOrInsertLocal(localvar->id, allo);
+            if (localvar->isUsed)
+            {
+                llvm::AllocaInst *allo = builder_p->CreateAlloca(typeToLLVMType(&localvar->type), nullptr, localvar->name);
+                getOrInsertLocal(localvar->id, allo);
+            }
         }
     }
 
