@@ -1,9 +1,9 @@
 #include "asg.hpp"
+#include <llvm/ADT/APInt.h>
 #include <llvm/Support/JSON.h>
 #include <string>
 #include <unordered_map>
 
-std::unordered_map<std::string, Stmt *> sym_table;
 Type getType(const llvm::StringRef qualType);
 std::string getStrVal(std::string serial, int length);
 
@@ -18,11 +18,11 @@ void castV(Expr::value *resV,
            Type::BaseType &resBaseType,
            Type::BaseType &toCastBaseType);
 
-Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t())
+Stmt *deserializeJson(llvm::json::Object *O, Stmt *father = std::nullptr_t())
 {
 
     Stmt *cur;
-
+    static std::unordered_map<std::string, Stmt *> sym_table;
     // get id from my parser or clang
     static int cur_id = 0;
     llvm::StringRef id;
@@ -95,7 +95,7 @@ Stmt *deserializeJson(const llvm::json::Object *O, Stmt *father = std::nullptr_t
         VarDecl *tmp = Mgr::g.make<VarDecl>();
         tmp->name = name_p->str();
         if (auto ul = father->dcast<TranslationUnitDecl>())
-            tmp->is_global = true;
+            tmp->isGlobal = true;
         else if (auto func = father->dcast<FunctionDecl>())
             func->localVars.push_back(tmp); // 将变量存在FunctionDecl内
 

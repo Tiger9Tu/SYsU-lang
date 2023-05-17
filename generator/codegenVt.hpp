@@ -34,7 +34,7 @@ public:
         if (p->isUsed == false)
             return 1;
 
-        if (p->is_global)
+        if (p->isGlobal)
         {
             module_p->getOrInsertGlobal(p->name, typeToLLVMType(&p->type));
             llvm::GlobalVariable *globalVar = module_p->getNamedGlobal(p->name); // global value is not in symbol table
@@ -107,7 +107,8 @@ public:
     int visit(FunctionDecl *p)
     {
         // opt
-        if (p->isUsed == false && p->name != "main"){
+        if (p->isUsed == false && p->name != "main")
+        {
             return 1;
         }
 
@@ -393,9 +394,9 @@ public:
     int visit(ImplicitCastExpr *p)
     {
         p->toCastExp->accept(this);
-        bool is_global = false;
+        bool isGlobal = false;
         if (!builder_p->GetInsertBlock())
-            is_global = true;
+            isGlobal = true;
 
         if (p->isSingleConst)
         {

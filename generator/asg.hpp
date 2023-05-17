@@ -153,6 +153,7 @@ struct Expr
 struct Decl
     : public Expr
 {
+    bool isGlobal = false;
     bool isUsed = false;
     std::string name;
 };
@@ -229,6 +230,11 @@ struct IntegerLiteral
     int accept(Visitor *pv) final { return pv->visit(this); }
 };
 
+struct TypedefDecl
+    : public Decl
+{
+};
+
 struct ParmVarDecl
     : public Decl
 {
@@ -248,7 +254,6 @@ struct VarDecl
     : public Decl
 {
     Expr *initExp; // 1 init = expr
-    bool is_global;
     int accept(Visitor *pv) final { return pv->visit(this); }
 };
 
