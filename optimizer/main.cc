@@ -8,6 +8,8 @@
 
 int main(int argc, char **argv)
 {
+  sleep(10);
+
   llvm::cl::OptionCategory CallCounterCategory{"call counter options"};
 
   llvm::cl::opt<decltype(llvm::StringRef("").str())> InputModule{
@@ -65,7 +67,6 @@ int main(int argc, char **argv)
   // Create a module pass manager and add StaticCallCounterPrinter to it.
   llvm::ModulePassManager MPM;
   MPM.addPass(sysu::StaticCallCounterPrinter(llvm::errs()));
-
   llvm::FunctionPassManager FPM;
   FPM.addPass(sysu::FunctionDCE());
   // FPM.addPass(sysu::CSE());

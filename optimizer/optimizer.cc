@@ -2,6 +2,10 @@
 
 #include <llvm/Passes/PassBuilder.h>
 
+//===--------------------------------------------------------------------===//
+// Function call pass implementation
+//
+
 llvm::PreservedAnalyses
 sysu::StaticCallCounterPrinter::run(llvm::Module &M,
                                     llvm::ModuleAnalysisManager &MAM)
@@ -68,43 +72,150 @@ sysu::StaticCallCounter::run(llvm::Module &M, llvm::ModuleAnalysisManager &)
 }
 
 llvm::AnalysisKey sysu::StaticCallCounter::Key;
+/*
+//===--------------------------------------------------------------------===//
+// Function alive variable analysis pass implementation
+//
 
+bool isRootAliveInst(llvm::Instruction &I)
+{
+  return !I.isSafeToRemove() ||
+         I.isTerminator() || // ||
+         llvm::isa<llvm::CallInst>(I) ||
+         (llvm::isa<llvm::StoreInst>(I) && llvm::isa<llvm::GlobalValue>(I.getOperand(1))); // I.mayReadOrWriteMemory();
+}
+
+bool isAliveInst(llvm::Instruction &I)
+{
+  if (isRootAliveInst(I))
+    return true;
+}
+
+sysu::FunctionAliveVariableAnalyser::Result
+sysu::FunctionAliveVariableAnalyser::run(llvm::Function &F, llvm::FunctionAnalysisManager &)
+{
+  llvm::SmallVector<llvm::Instruction *, 128> Res;
+
+  llvm::SmallVector<llvm::Value *, 128> aliveValues;
+  for (llvm::Instruction &I : instructions(F))
+  {
+    // 搜集所有位于root的活跃变量
+    int opn = I.getNumOperands();
+    if (isRootAliveInst(I))
+    {
+      for (int i = 0; i < opn; i++)
+        aliveValues.push_back(I.getOperand(i));
+    }
+  }
+}
+*/
+//===--------------------------------------------------------------------===//
+// DeadCodeElimination pass implementation
+//
+/*
+bool isDeadInst(llvm::Instruction &I)
+{
+  if (isAliveInst(I))
+    return false;
+  if (I.use_empty())
+    return true;
+  for (llvm::Use &OI : I.operands())
+  {
+    if (llvm::Instruction *Inst = llvm::dyn_cast<llvm::Instruction>(OI.get()))
+    {
+      if (!isDeadInst(*Inst))
+        return false;
+    }
+  }
+  return true;
+}
+
+bool sysu::FunctionDCE::eliminateDeadCode(llvm::Function &F)
+{ */
+/*
+std::vector<llvm::Instruction *> deadInsts;
+for (llvm::Instruction &I : llvm::instructions(F))
+  if (isDeadInst(I))
+    deadInsts.push_back(&I);
+
+for (llvm::Instruction *I : deadInsts)
+{
+  I->dropAllReferences();
+  I->eraseFromParent();
+}
+return !deadInsts.empty();
+
+*/
+/*
+  llvm::SmallPtrSet<llvm::Instruction *, 32> Alive;
+ llvm::SmallVector<llvm::Instruction *, 128> Worklist;
+
+ for (llvm::Instruction &I : instructions(F))
+ {
+   if (isAliveInst(I))
+   {
+
+     Alive.insert(&I);
+     Worklist.push_back(&I);
+   }
+ }
+
+ while (!Worklist.empty())
+ {
+   llvm::Instruction *LiveInst = Worklist.pop_back_val();
+   for (llvm::Use &OI : LiveInst->operands())
+   {
+     if (llvm::Instruction *Inst = llvm::dyn_cast<llvm::Instruction>(OI))
+     {
+
+       if (Alive.insert(Inst).second)
+       {
+         Worklist.push_back(Inst);
+       }
+     }
+   }
+ }
+
+ for (llvm::Instruction &I : instructions(F))
+ {
+   if (!Alive.count(&I))
+   {
+     Worklist.push_back(&I);
+     I.dropAllReferences();
+   }
+ }
+
+ for (llvm::Instruction *&I : Worklist)
+ {
+   I->eraseFromParent();
+ }
+ return !Worklist.empty();
+}
+
+*/
 //===--------------------------------------------------------------------===//
 // DeadCodeElimination pass implementation
 //
 
-bool isInstructionDead(llvm::Instruction *I,
-                       const llvm::TargetLibraryInfo *TLI = (const llvm::TargetLibraryInfo *)nullptr)
+bool myIsInstructionTriviallyDead(llvm::Instruction *I, const llvm::TargetLibraryInfo *TLI)
 {
-  if (llvm::isInstructionTriviallyDead(I, TLI))
-  {
+  if (!I->use_empty())
+    return false;
+  if (I->isTerminator())
+    return false;
 
-    if (I->hasNUsesOrMore(1))
-      return false;
+  // We don't want the landingpad-like instructions removed by anything this
+  // general.
+  if (I->isEHPad())
+    return false;
 
-    switch (I->getOpcode())
-    {
-    case llvm::Instruction::Ret:
-    // case llvm::Instruction::Alloca:
-    case llvm::Instruction::Br:
-    case llvm::Instruction::Switch:
-    case llvm::Instruction::IndirectBr:
-    case llvm::Instruction::Invoke:
-    case llvm::Instruction::Unreachable:
-    case llvm::Instruction::Fence:
-    case llvm::Instruction::Call:
-    // case llvm::Instruction::Store:
-    case llvm::Instruction::AtomicCmpXchg:
-    case llvm::Instruction::AtomicRMW:
-    case llvm::Instruction::Resume:
-    case llvm::Instruction::LandingPad:
-      return false;
-    case llvm::Instruction::Load:
-      return !llvm::dyn_cast<llvm::LoadInst>(I)->isVolatile();
-    default:
-      return true;
-    }
-  }
+  // We don't want debug info removed by anything this general.
+  if (llvm::isa<llvm::DbgVariableIntrinsic>(I))
+    return false;
+
+  if (!I->mayHaveSideEffects())
+    return true;
+
   return false;
 }
 
@@ -112,10 +223,8 @@ static bool DCEInstruction(llvm::Instruction *I,
                            llvm::SmallSetVector<llvm::Instruction *, 16> &WorkList,
                            const llvm::TargetLibraryInfo *TLI)
 {
-  if (llvm::isInstructionTriviallyDead(I, TLI))
+  if (myIsInstructionTriviallyDead(I, nullptr))
   {
-    llvm::salvageDebugInfo(*I);
-    llvm::salvageKnowledge(I);
 
     // Null out all of the instruction's operands to see if any operand becomes
     // dead as we go.
@@ -131,11 +240,13 @@ static bool DCEInstruction(llvm::Instruction *I,
       // operand, and if it is 'trivially' dead, delete it in a future loop
       // iteration.
       if (llvm::Instruction *OpI = llvm::dyn_cast<llvm::Instruction>(OpV))
-        if (llvm::isInstructionTriviallyDead(OpI, TLI))
+        if (isInstructionTriviallyDead(OpI, nullptr))
           WorkList.insert(OpI);
     }
+    llvm::errs() << "erase ";
+    I->print(llvm::errs());
+    llvm::errs() << "\n";
     I->eraseFromParent();
-    //++DCEEliminated;
     return true;
   }
   return false;
@@ -148,7 +259,7 @@ static bool eliminateDeadCode(llvm::Function &F, llvm::TargetLibraryInfo *TLI)
   // Iterate over the original function, only adding insts to the worklist
   // if they actually need to be revisited. This avoids having to pre-init
   // the worklist with the entire function's worth of instructions.
-  for (llvm::Instruction &I : llvm::make_early_inc_range(instructions(F)))
+  for (llvm::Instruction &I : llvm::make_early_inc_range(llvm::instructions(F)))
   {
     // We're visiting this instruction now, so make sure it's not in the
     // worklist from an earlier visit.
@@ -164,9 +275,18 @@ static bool eliminateDeadCode(llvm::Function &F, llvm::TargetLibraryInfo *TLI)
   return MadeChange;
 }
 
+bool sysu::FunctionDCE::skipFunction(llvm::Function &F)
+{
+  return false;
+}
+#include "llvm/Pass.h"
+
 llvm::PreservedAnalyses sysu::FunctionDCE::run(llvm::Function &F, llvm::FunctionAnalysisManager &AM)
 {
-  if (!eliminateDeadCode(F, &AM.getResult<llvm::TargetLibraryAnalysis>(F)))
+  if (skipFunction(F))
+    return llvm::PreservedAnalyses::all();
+
+  if (!eliminateDeadCode(F, nullptr))
     return llvm::PreservedAnalyses::all();
 
   llvm::PreservedAnalyses PA;

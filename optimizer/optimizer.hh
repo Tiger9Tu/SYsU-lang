@@ -24,7 +24,32 @@
 #include <llvm/Transforms/Utils/AssumeBundleBuilder.h>
 #include <llvm/Transforms/Utils/BasicBlockUtils.h>
 #include <llvm/Transforms/Utils/Local.h>
+#include <llvm/IR/IntrinsicInst.h>
 
+#include "llvm/InitializePasses.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/IR/Function.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/InstIterator.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+
+#include "llvm/Transforms/Scalar/DCE.h"
+#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/IR/InstIterator.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/InitializePasses.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/DebugCounter.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Utils/AssumeBundleBuilder.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Transforms/Utils/Local.h"
 // using namespace llvm;
 
 namespace sysu
@@ -55,11 +80,27 @@ namespace sysu
     llvm::raw_ostream &OS;
   };
 
+  class FunctionAliveVariableAnalyser : public llvm::AnalysisInfoMixin<FunctionAliveVariableAnalyser>
+  {
+  public:
+    using Result = llvm::MapVector<const llvm::Function *, llvm::SmallVector<llvm::Instruction *, 128>>;
+    Result run(llvm::Function &F, llvm::FunctionAnalysisManager &);
+
+  private:
+    // A special type used by analysis passes to provide an address that
+    // identifies that particular analysis pass type.
+    static llvm::AnalysisKey Key;
+    friend struct llvm::AnalysisInfoMixin<FunctionAliveVariableAnalyser>;
+  };
+
   class FunctionDCE : public llvm::PassInfoMixin<FunctionDCE>
   {
   public:
     using Result = llvm::PreservedAnalyses;
-    Result run(llvm::Function &M, llvm::FunctionAnalysisManager &FAM);
+    Result run(llvm::Function &F, llvm::FunctionAnalysisManager &FAM);
+
+  private:
+    bool skipFunction(llvm::Function &F);
   };
 
 } // namespace sysu

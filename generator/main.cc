@@ -24,7 +24,7 @@ int main(int argc, char const *argv[])
   }
   auto llvmin = llvm::MemoryBuffer::getFileOrSTDIN("-");
   auto json = llvm::json::parse(llvmin.get()->getBuffer());
-  TranslationUnitDecl *trans_unit_decl_p = nonRecursiveDeserializeJson(json->getAsObject())->dcast<TranslationUnitDecl>();
+  TranslationUnitDecl *trans_unit_decl_p = deserializeJson(json->getAsObject())->dcast<TranslationUnitDecl>();
   CodegenVisitor cv;
   trans_unit_decl_p->accept(&cv);
   cv.print();
