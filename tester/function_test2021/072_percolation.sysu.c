@@ -15,7 +15,6 @@ int findfa(int a) {
   else {
     array[a] = findfa(array[a]);
     return array[a];
-    // return 0;
   }
 }
 void mmerge(int a, int b) {
