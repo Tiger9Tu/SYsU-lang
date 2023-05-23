@@ -24,14 +24,13 @@ namespace dfa
 
             /// @todo(CSCD70) Please complete this method.
 
-            return false;
+            return Var == Val;
         }
         Variable replaceValueWith(const llvm::Value *const SrcVal,
                                   const llvm::Value *const DstVal) const final
         {
 
             /// @todo(CSCD70) Please complete this method.
-
             return *this;
         }
 

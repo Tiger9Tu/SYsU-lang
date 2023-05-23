@@ -54,6 +54,7 @@ namespace dfa
         {
 
             /// @todo(CSCD70) Please complete this method.
+            // if(LHS == SrcVal)
 
             return *this;
         }

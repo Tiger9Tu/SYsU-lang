@@ -1,4 +1,3 @@
-
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/ADT/MapVector.h>
 #include <llvm/ADT/SetVector.h>

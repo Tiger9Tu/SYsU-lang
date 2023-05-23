@@ -1,6 +1,6 @@
 find_package(LLVM REQUIRED)
 
-add_library(sysuOptimizer SHARED pass/passPlugin.cc pass/scc.cc  pass/dce.cc)
+add_library(sysuOptimizer SHARED pass/passPlugin.cc pass/scc.cc pass/cse.cc pass/dce.cc)
 target_include_directories(sysuOptimizer PRIVATE ${LLVM_INCLUDE_DIRS})
 install(TARGETS sysuOptimizer)
 

@@ -46,9 +46,6 @@ static bool DCEInstruction(Instruction *I,
         if (myIsInstructionTriviallyDead(OpI, nullptr))
           WorkList.insert(OpI);
     }
-    errs() << "erase ";
-    I->print(errs());
-    errs() << "\n";
     I->eraseFromParent();
     return true;
   }

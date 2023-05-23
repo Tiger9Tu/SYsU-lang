@@ -11,7 +11,7 @@
 
 #include "scc.hh"
 #include "dce.hh"
-// #include "cse.hh"
+#include "cse.hh"
 #include "llvm/Transforms/Scalar/EarlyCSE.h"
 
 extern "C"
