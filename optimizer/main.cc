@@ -1,4 +1,4 @@
-#include "optimizer.hh"
+#include "pass/passPlugin.hh"
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/CommandLine.h>
@@ -68,11 +68,10 @@ int main(int argc, char **argv)
   llvm::ModulePassManager MPM;
   MPM.addPass(sysu::StaticCallCounterPrinter(llvm::errs()));
   llvm::FunctionPassManager FPM;
-  FPM.addPass(sysu::FunctionDCE());
-  // FPM.addPass(sysu::CSE());
-  // FPM.addPass(sysu::DCE());
-  // FPM.addPass(sysu::InstSimplify()); // 对于有符号整数我们不能用移位代替，否则会出错
-  // FPM.addPass(sysu::InstComb());
+  // FPM.addPass(sysu::FunctionDCE());
+  FPM.addPass(llvm::EarlyCSEPass());
+  //   FPM.addPass(sysu::InstSimplify()); // 对于有符号整数我们不能用移位代替，否则会出错
+  //   FPM.addPass(sysu::InstComb());
 
   for (auto F = M->getFunctionList().begin(); F != M->getFunctionList().end(); ++F)
   {
