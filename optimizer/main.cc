@@ -68,7 +68,7 @@ int main(int argc, char **argv)
   llvm::ModulePassManager MPM;
   MPM.addPass(sysu::StaticCallCounterPrinter(llvm::errs()));
   llvm::FunctionPassManager FPM;
-  // FPM.addPass(sysu::FunctionDCE());
+  FPM.addPass(sysu::FunctionDCE());
   FPM.addPass(sysu::FunctionCSE());
   //   FPM.addPass(sysu::InstSimplify()); // 对于有符号整数我们不能用移位代替，否则会出错
   //   FPM.addPass(sysu::InstComb());

@@ -36,7 +36,7 @@ Stmt *deserializeJson(llvm::json::Object *O, Stmt *father = std::nullptr_t())
     auto name_p = (O->getString("name"));
     if (auto built_in_p = O->getString("storageClass"))
         return nullptr;
-
+    bool hasSideEffectFlag = false;
     Type type;
     if (O->getObject("type"))
         type = getType(*(O->getObject("type")->getString("qualType")));
@@ -70,7 +70,11 @@ Stmt *deserializeJson(llvm::json::Object *O, Stmt *father = std::nullptr_t())
         for (; i < inner->size(); i++)
         {
             if (auto son = deserializeJson((*inner)[i].getAsObject(), _father))
+            {
+                if (son->hasSideEffect)
+                    hasSideEffectFlag = true;
                 inner_sons.push_back(son);
+            }
         }
     }
 
@@ -240,6 +244,7 @@ Stmt *deserializeJson(llvm::json::Object *O, Stmt *father = std::nullptr_t())
         CallExpr *tmp = Mgr::g.make<CallExpr>();
         tmp->type = type;
         tmp->functionPointerExp = inner_sons[0]->dcast<Expr>();
+        hasSideEffectFlag = true;
         inner_sons.erase(inner_sons.begin());
         for (auto it : inner_sons)
             tmp->parmExps.push_back(it->dcast<Expr>());
@@ -303,7 +308,7 @@ Stmt *deserializeJson(llvm::json::Object *O, Stmt *father = std::nullptr_t())
     {
         return nullptr; //"ImplicitValueInitExpr"
     }
-
+    cur->hasSideEffect = hasSideEffectFlag;
     cur->id = id.str();
     return cur;
 }

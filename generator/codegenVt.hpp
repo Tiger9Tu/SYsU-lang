@@ -31,7 +31,7 @@ public:
     int visit(VarDecl *p)
     {
         // opt
-        if (p->isUsed == false)
+        if (p->isUsed == false && !p->hasSideEffect)
             return 1;
 
         if (p->isGlobal)
@@ -963,7 +963,7 @@ private:
         // 为函数内所有位置的局部变量分配空间
         for (auto localvar : p->localVars)
         {
-            if (localvar->isUsed)
+            if (localvar->isUsed || localvar->hasSideEffect)
             {
                 llvm::AllocaInst *allo = builder_p->CreateAlloca(typeToLLVMType(&localvar->type), nullptr, localvar->name);
                 getOrInsertLocal(localvar->id, allo);

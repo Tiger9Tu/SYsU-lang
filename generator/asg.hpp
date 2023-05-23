@@ -122,6 +122,7 @@ struct Stmt
     : public Obj
 {
     std::string id;
+    bool hasSideEffect = false;
 };
 
 struct Expr
@@ -141,6 +142,7 @@ struct Expr
 
     std::string serial;
     bool isSingleConst = false;
+
     enum ValueCatagory
     {
         LVALUE,
