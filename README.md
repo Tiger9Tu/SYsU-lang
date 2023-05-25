@@ -41,6 +41,7 @@ cmake --build $HOME/sysu/build -t install
 CTEST_OUTPUT_ON_FAILURE=1 cmake --build $HOME/sysu/build -t test
 
 # 打包源代码以提交作业
+CPACK_SOURCE_IGNORE_FILES=".git/;tester/third_party/"
 cmake --build $HOME/sysu/build -t package_source
 
 # 检查编译结果
