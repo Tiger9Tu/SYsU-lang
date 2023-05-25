@@ -34,6 +34,7 @@ Stmt *deserializeJson(llvm::json::Object *O, Stmt *father = std::nullptr_t())
     auto kind = *(O->getString("kind"));
     auto value = *(O->getString("value"));
     auto name_p = (O->getString("name"));
+
     if (auto built_in_p = O->getString("storageClass"))
         return nullptr;
     bool hasSideEffectFlag = false;
@@ -98,6 +99,10 @@ Stmt *deserializeJson(llvm::json::Object *O, Stmt *father = std::nullptr_t())
     {
         VarDecl *tmp = Mgr::g.make<VarDecl>();
         tmp->name = name_p->str();
+        if (tmp->name.size() > 50)
+        {
+            tmp->name = tmp->name.substr(0, 5) + id.str();
+        }
         if (auto ul = father->dcast<TranslationUnitDecl>())
             tmp->isGlobal = true;
         else if (auto func = father->dcast<FunctionDecl>())

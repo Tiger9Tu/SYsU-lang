@@ -78,14 +78,13 @@ public:
                 }
                 else
                 {
-                    builder_p->CreateMemSet(
-                        /*ptr*/ allo,
-                        /*value*/ llvm::ConstantInt::get(*context_p, llvm::APInt(8, 0)),
-                        /*size*/ llvm::ConstantInt::get(*context_p, llvm::APInt(32, length * 4)),
-                        llvm::MaybeAlign(8));
-
                     if (auto arrInitExp = p->initExp)
                     {
+                        builder_p->CreateMemSet(
+                            /*ptr*/ allo,
+                            /*value*/ llvm::ConstantInt::get(*context_p, llvm::APInt(8, 0)),
+                            /*size*/ llvm::ConstantInt::get(*context_p, llvm::APInt(32, length * 4)),
+                            llvm::MaybeAlign(8));
                         buildArray(arrInitExp, allo); // 数组初始化的赋值方式需要特殊处理
                     }
                 }

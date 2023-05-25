@@ -74,10 +74,12 @@ int main(int argc, char **argv)
 
   //   FPM.addPass(sysu::InstSimplify()); // 对于有符号整数我们不能用移位代替，否则会出错
   //   FPM.addPass(sysu::InstComb());
-
+  //
   for (auto F = M->getFunctionList().begin(); F != M->getFunctionList().end(); ++F)
   {
-    if (F->getName().find("_sysy") == llvm::StringRef::npos)
+    if (F->getName().find("_sysy") == llvm::StringRef::npos &&
+        F->getName().find("sysu") == llvm::StringRef::npos &&
+        F->getName().find("llvm") == llvm::StringRef::npos)
     {
       FPM.run(*F, FAM);
     }

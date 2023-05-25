@@ -49,9 +49,7 @@ PreservedAnalyses sysu::FunctionM2R::run(Function &F,
         {
             break;
         }
-
         doPromote(Allocas, DT);
-
         Changed = true;
     }
 
@@ -67,6 +65,11 @@ PreservedAnalyses sysu::FunctionM2R::run(Function &F,
 
 static bool canPromote(const AllocaInst *AI)
 {
+    //;
+    // if (AI->getAllocatedType()->isArrayTy())
+    //  {
+    //     return false;
+    // }
     for (const auto *U : AI->users())
     {
         if (auto *SI = dyn_cast<StoreInst>(U))
