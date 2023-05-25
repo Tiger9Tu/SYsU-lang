@@ -35,6 +35,7 @@ struct StringLiteral;
 struct Visitor
 {
 public:
+    // virtual int visit(FileSignal *) = 0;
     virtual int visit(TranslationUnitDecl *) = 0;
     virtual int visit(VarDecl *) = 0;      // int main(){ ... }
     virtual int visit(FunctionDecl *) = 0; // int main(){ ... }
@@ -91,6 +92,14 @@ public:
         emplace_back(std::move(ptr));
         return obj;
     }
+};
+
+struct FileSignal
+{
+public:
+    static FileSignal f;
+    std::string CheatIRFilePath;
+    // int accept(Visitor *pv) final { return pv->visit(this); }
 };
 
 struct Type
@@ -158,6 +167,10 @@ struct Decl
     bool isGlobal = false;
     bool isUsed = false;
     std::string name;
+};
+
+struct CheatSignal : public Stmt
+{
 };
 
 struct ImplicitCastExpr

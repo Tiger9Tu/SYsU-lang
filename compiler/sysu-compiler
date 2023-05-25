@@ -284,6 +284,7 @@ def main(*argv):
                                 timeout=time_out,
                                 stdout=subprocess.PIPE)
                             if s.returncode:
+                                print(":::debug -- line 288 -- :::")
                                 return wk_exit(s.returncode)
                             s = s.stdout
                             s = subprocess.run(
@@ -292,6 +293,7 @@ def main(*argv):
                                 input=s,
                                 stdout=subprocess.PIPE)
                             if s.returncode:
+                                print(":::debug -- line 296 -- :::")
                                 return wk_exit(s.returncode)
                             s = s.stdout
                         s = json.loads(s)
@@ -304,6 +306,7 @@ def main(*argv):
                                 input=s,
                                 stdout=subprocess.PIPE)
                             if s.returncode:
+                                print(":::debug -- line 309 -- return code = %d:::" %(s.returncode))
                                 return wk_exit(s.returncode)
                             s = s.stdout
                         sysu.append(s)
@@ -324,6 +327,7 @@ def main(*argv):
                             timeout=time_out).returncode
                         if r:
                             logging.getLogger(__name__).error("ir error")
+                            print(":::debug -- line 330 -- :::")
                             return wk_exit(r)
                         jt = subprocess.run(
                             [exe],
@@ -333,11 +337,18 @@ def main(*argv):
                             stdout=subprocess.PIPE)
                         res.append(jt)
                         if len(res) == 1:
+                            print(":::debug -- line 340 -- :::")
                             log = "[{}/{}] clang -O3: {}us, ret {}".format(
                                 ff, len(filenames), get_tm(jt), jt.returncode)
                             logging.getLogger(__name__).info(log)
                             results["tests"][ff]["output"] += log + "\n"
                         else:
+                            # degug
+                            print(":::debug -- line 346 -- stdout/stderr:::")
+                            print(jt.stdout)
+                            print("\n")
+                            print(jt.stderr)
+
                             log = "[{}/{}] sysu-lang: {}us, ret {}".format(
                                 ff, len(filenames), get_tm(jt), jt.returncode)
                             logging.getLogger(__name__).info(log)
@@ -347,11 +358,15 @@ def main(*argv):
                                     res[0].stdout != jt.stdout:
                                 logging.getLogger(__name__).error(
                                     "fail: not equ")
+                                print(":::debug -- line 354 -- :::")
                                 return wk_exit(-1)
+                            print(":::debug -- line 356 -- :::")
                             if get_tm(res[0]) > 0:
+                                print(":::debug -- line 358 -- :::")
                                 if get_tm(jt) <= 0:
                                     logging.getLogger(__name__).error(
                                         "fail: no timer")
+                                    print(":::debug -- line 360 -- :::")
                                     return wk_exit(-1)
                                 performance.append(get_tm(res[0])/get_tm(jt))
                             results["tests"][ff]["score"] = 1
@@ -373,6 +388,7 @@ def main(*argv):
                     "order": 2,
                     "is_desc": True,
                     "value": score}]
+        print(":::debug -- line 382 -- :::")
         return wk_exit(0)
 
     def convert_sysy(filenames):

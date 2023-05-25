@@ -1,0 +1,1 @@
+cat /workspace/SYsU-lang/generator/target/$1 | lli --load=libsysy.so --load=libsysu.so /workspace/SYsU-lang/generator/target/$2

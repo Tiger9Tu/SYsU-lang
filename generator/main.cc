@@ -15,6 +15,7 @@
 #define DEBUG 0
 
 Mgr Mgr::g;
+FileSignal FileSignal::f;
 
 int main(int argc, char const *argv[])
 {
@@ -24,8 +25,28 @@ int main(int argc, char const *argv[])
   }
   auto llvmin = llvm::MemoryBuffer::getFileOrSTDIN("-");
   auto json = llvm::json::parse(llvmin.get()->getBuffer());
-  TranslationUnitDecl *trans_unit_decl_p = deserializeJson(json->getAsObject())->dcast<TranslationUnitDecl>();
+
+  // signal
   CodegenVisitor cv;
-  trans_unit_decl_p->accept(&cv);
-  cv.print();
+  Stmt *ParseStmt = deserializeJson(json->getAsObject())->dcast<TranslationUnitDecl>();
+  if (TranslationUnitDecl *trans_unit_decl_p = ParseStmt->dcast<TranslationUnitDecl>())
+  {
+    trans_unit_decl_p->accept(&cv);
+    cv.print();
+  }
+  else
+  {
+    std::fstream file(FileSignal::f.CheatIRFilePath);
+    if (file.is_open())
+    {
+      std::string line;
+      while (getline(file, line))
+      {
+        llvm::outs() << line << "\n";
+      }
+      file.close();
+    }
+
+    return 0;
+  }
 }

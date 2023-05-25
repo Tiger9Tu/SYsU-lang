@@ -10,6 +10,7 @@
 #include <llvm/IR/ValueSymbolTable.h>
 #include <unordered_map>
 #include "asg.hpp"
+#include <fstream>
 
 struct CodegenVisitor : public Visitor
 {
@@ -21,7 +22,7 @@ private:
     };
 
 public:
-    int visit(TranslationUnitDecl *p)
+        int visit(TranslationUnitDecl *p)
     {
         for (auto i : p->externalDecls)
             i->accept(this);
