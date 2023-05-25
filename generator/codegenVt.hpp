@@ -164,7 +164,7 @@ public:
             retVal->accept(this);
             builder_p->CreateStore(pop(), getOrInsertLocal("retval"));
         }
-        builder_p->CreateBr(getNamedSucBB({"return"}));
+        builder_p->CreateBr(getNamedSucBB({"return"}, false));
         return 1;
     }
 
@@ -265,7 +265,7 @@ public:
         // LoopEnd作为名字的字串，从而在break stmt处可以识别
         llvm::BasicBlock *whileCond = llvm::BasicBlock::Create(*context_p, "while.cond", funcVal);
         whileCond->moveAfter(builder_p->GetInsertBlock());
-        llvm::BasicBlock *whileBody = llvm::BasicBlock::Create(*context_p, "while.body", funcVal);
+        llvm::BasicBlock *whileBody = llvm::BasicBlock::Create(*context_p, "while.then", funcVal);
         whileBody->moveAfter(whileCond);
         llvm::BasicBlock *whileEnd = llvm::BasicBlock::Create(*context_p, "while.end", funcVal);
         whileEnd->moveAfter(whileBody);
@@ -304,7 +304,7 @@ public:
     {
         llvm::Function *funcVal = builder_p->GetInsertBlock()->getParent();
 
-        llvm::BasicBlock *doBodyBB = llvm::BasicBlock::Create(*context_p, "do.body", funcVal);
+        llvm::BasicBlock *doBodyBB = llvm::BasicBlock::Create(*context_p, "do.then", funcVal);
         doBodyBB->moveAfter(builder_p->GetInsertBlock());
         llvm::BasicBlock *doCondBB = llvm::BasicBlock::Create(*context_p, "do.cond", funcVal);
         doCondBB->moveAfter(doBodyBB);
@@ -340,13 +340,14 @@ public:
 
     int visit(BreakStmt *)
     {
-        builder_p->CreateBr(getNamedSucBB({"while.end"})); // 好像没有for
+        builder_p->CreateBr(getNamedSucBB({"while.end"}, false)); // 好像没有for
         return 1;
     }
 
     int visit(ContinueStmt *)
     {
-        builder_p->CreateBr(getNamedPreBB({"while.cond"}));
+        auto whileCondBB = getNamedPreBB({"while.cond"}, true);
+        builder_p->CreateBr(whileCondBB);
         return 1;
     }
 
@@ -979,43 +980,61 @@ private:
         return false;
     }
 
-    llvm::BasicBlock *getNamedBB(const std::vector<std::string> substrs, int is_suc, bool includeCurBB)
+    llvm::BasicBlock *getNamedPreBB(const std::vector<std::string> substrs, bool includeCurBB = false)
     {
         llvm::Function *funcVal = builder_p->GetInsertBlock()->getParent();
         llvm::StringRef curBBName = builder_p->GetInsertBlock()->getName();
+
         bool curBBVisited = false;
+
+        if (includeCurBB)
+        {
+            for (auto substr : substrs)
+                if (builder_p->GetInsertBlock()->getName().str().find(substr) != std::string::npos)
+                    return builder_p->GetInsertBlock();
+        }
+
+        llvm::BasicBlock *retBB = nullptr;
         for (llvm::BasicBlock &BB : *funcVal)
         {
             if (BB.getName() == curBBName)
             {
-                curBBVisited = true;
-                if (!includeCurBB)
-                    continue;
+                break;
             }
 
-            if (is_suc && curBBVisited || !is_suc && !curBBVisited)
-            {
+            for (auto substr : substrs)
+                if (BB.getName().str().find(substr) != std::string::npos)
+                    retBB = &BB;
+        }
+        return retBB;
+    }
+
+    llvm::BasicBlock *getNamedSucBB(const std::vector<std::string> substrs, bool includeCurBB = false)
+    {
+        llvm::Function *funcVal = builder_p->GetInsertBlock()->getParent();
+        llvm::StringRef curBBName = builder_p->GetInsertBlock()->getName();
+        bool curBBVisited = false;
+
+        if (includeCurBB)
+        {
+            for (auto substr : substrs)
+                if (builder_p->GetInsertBlock()->getName().str().find(substr) != std::string::npos)
+                    return builder_p->GetInsertBlock();
+        }
+
+        for (llvm::BasicBlock &BB : *funcVal)
+        {
+            if (curBBVisited)
                 for (auto substr : substrs)
                     if (BB.getName().str().find(substr) != std::string::npos)
                         return &BB;
-            }
-            else
+            if (BB.getName() == curBBName)
             {
-                if (!is_suc)
-                    break;
+                curBBVisited = true;
             }
         }
-        return builder_p->GetInsertBlock();
-    }
 
-    llvm::BasicBlock *getNamedPreBB(const std::vector<std::string> substrs)
-    {
-        return getNamedBB(substrs, 0, true);
-    }
-
-    llvm::BasicBlock *getNamedSucBB(const std::vector<std::string> substrs)
-    {
-        return getNamedBB(substrs, 1, false);
+        return nullptr;
     }
 
     llvm::Value *getOrInsertLocal(std::string id, llvm::Value *val = nullptr)

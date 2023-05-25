@@ -1,5 +1,0 @@
-
-( export PATH=$HOME/sysu/bin:$PATH   CPATH=$HOME/sysu/include:$CPATH   LIBRARY_PATH=$HOME/sysu/lib:$LIBRARY_PATH   LD_LIBRARY_PATH=$HOME/sysu/lib:$LD_LIBRARY_PATH &&
-   clang -E /workspace/SYsU-lang/$1 |   clang -cc1 -ast-dump=json |   sysu-generator  > /workspace/SYsU-lang/generator/ign/my.ll)
-( export PATH=$HOME/sysu/bin:$PATH   CPATH=$HOME/sysu/include:$CPATH   LIBRARY_PATH=$HOME/sysu/lib:$LIBRARY_PATH   LD_LIBRARY_PATH=$HOME/sysu/lib:$LD_LIBRARY_PATH && 
-clang -E /workspace/SYsU-lang/$1 | clang -cc1 -O0 -S -emit-llvm | sed '1,5d'  > /workspace/SYsU-lang/generator/ign/cl.ll )

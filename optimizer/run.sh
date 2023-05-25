@@ -1,1 +1,0 @@
-cat optimizer/ign/tin.txt | lli --load=libsysy.so --load=libsysu.so optimizer/ign/t.ll 

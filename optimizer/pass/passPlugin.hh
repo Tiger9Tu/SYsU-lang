@@ -12,7 +12,7 @@
 #include "scc.hh"
 #include "dce.hh"
 #include "cse.hh"
-#include "llvm/Transforms/Scalar/EarlyCSE.h"
+#include "m2r.hh"
 
 extern "C"
 {
